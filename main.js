@@ -120,7 +120,12 @@ async function startDesktopShell() {
   ipcMain.handle("magicus:access-clear", async () => { await fs.rm(credentialFile, { force: true }); return { ok: true }; });
   ipcMain.handle("magicus:workspace-load", () => readJson(workspaceFile, { folders: [] }));
   ipcMain.handle("magicus:workspace-save", async (_event, workspace) => {
-    const safe = { folders: Array.isArray(workspace?.folders) ? workspace.folders.slice(0, 100) : [] };
+    const safe = {
+      version: 4,
+      folders: Array.isArray(workspace?.folders) ? workspace.folders.slice(0, 100) : [],
+      projects: Array.isArray(workspace?.projects) ? workspace.projects.slice(0, 250) : [],
+      sync: { provider: "MAGICUS_BRIDGE", status: "local", updatedAt: new Date().toISOString() },
+    };
     await writeJson(workspaceFile, safe); return { ok: true };
   });
   ipcMain.handle("magicus:launch-app", (_event, shortcut) => {
