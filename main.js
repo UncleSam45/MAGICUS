@@ -7,6 +7,7 @@ const crypto = require("node:crypto");
 
 const APP_TITLE = "MAGICUS";
 const BRIDGE_REPOSITORY = "MAGICUS_BRIDGE";
+const BRIDGE_WORKSPACE_PATH = ".magicus/workspace.json";
 const ALWAYS_ON_TOP_LEVEL = "floating";
 
 function keepWindowOnTop(window) {
@@ -45,6 +46,83 @@ async function validateAccessKey(accessKey, request) {
   }
 }
 
+function bridgeHeaders(accessKey) {
+  return {
+    Accept: "application/vnd.github+json",
+    Authorization: `Bearer ${accessKey}`,
+    "X-GitHub-Api-Version": "2022-11-28",
+    "User-Agent": APP_TITLE,
+  };
+}
+
+function workspacePayload(workspace, updatedAt = new Date().toISOString()) {
+  return {
+    version: 4,
+    folders: Array.isArray(workspace?.folders) ? workspace.folders.slice(0, 100) : [],
+    projects: Array.isArray(workspace?.projects) ? workspace.projects.slice(0, 250) : [],
+    sync: { provider: "MAGICUS_BRIDGE", status: "synced", updatedAt },
+  };
+}
+
+function mergeWorkspace(local, remote) {
+  const localTime = Date.parse(local?.sync?.updatedAt || "") || 0;
+  const remoteTime = Date.parse(remote?.sync?.updatedAt || "") || 0;
+  const preferred = localTime > remoteTime ? local : remote;
+  const other = preferred === local ? remote : local;
+  const mergeById = (preferredItems, otherItems, combine) => {
+    const result = (Array.isArray(preferredItems) ? preferredItems : []).map(item => ({ ...item }));
+    for (const item of Array.isArray(otherItems) ? otherItems : []) {
+      const index = result.findIndex(candidate => candidate.id === item.id);
+      if (index < 0) result.push({ ...item });
+      else if (combine) result[index] = combine(result[index], item);
+    }
+    return result;
+  };
+  const folders = mergeById(preferred?.folders, other?.folders, (winner, older) => ({
+    ...older,
+    ...winner,
+    apps: mergeById(winner.apps, older.apps),
+  }));
+  return workspacePayload({
+    folders,
+    projects: mergeById(preferred?.projects, other?.projects),
+  });
+}
+
+async function readBridgeWorkspace(session, request) {
+  const endpoint = `https://api.github.com/repos/${encodeURIComponent(session.account)}/${BRIDGE_REPOSITORY}/contents/${BRIDGE_WORKSPACE_PATH}`;
+  const response = await request(endpoint, { headers: bridgeHeaders(session.accessKey) });
+  if (response.status === 404) return { workspace: null, sha: null };
+  if (!response.ok) throw new Error(accessFailure(response.status).message);
+  const record = await response.json();
+  if (!record?.content && Number(record?.size) === 0) return { workspace: null, sha: record.sha || null };
+  let content;
+  if (record?.content) {
+    content = Buffer.from(String(record.content).replace(/\s/g, ""), "base64").toString("utf8");
+  } else {
+    // GitHub deliberately omits base64 `content` for files larger than 1 MB.
+    const rawResponse = await request(endpoint, { headers: { ...bridgeHeaders(session.accessKey), Accept: "application/vnd.github.raw+json" } });
+    if (!rawResponse.ok) throw new Error(accessFailure(rawResponse.status).message);
+    content = await rawResponse.text();
+  }
+  try {
+    const parsed = JSON.parse(content);
+    return { workspace: workspacePayload(parsed, parsed?.sync?.updatedAt), sha: record.sha };
+  } catch {
+    throw new Error("The bridge workspace is empty or invalid JSON. Repair .magicus/workspace.json, then sign in again.");
+  }
+}
+
+async function writeBridgeWorkspace(session, workspace, request, knownSha) {
+  const endpoint = `https://api.github.com/repos/${encodeURIComponent(session.account)}/${BRIDGE_REPOSITORY}/contents/${BRIDGE_WORKSPACE_PATH}`;
+  const safe = workspacePayload(workspace);
+  const body = { message: "Sync MAGICUS workspace", content: Buffer.from(JSON.stringify(safe, null, 2), "utf8").toString("base64") };
+  if (knownSha) body.sha = knownSha;
+  const response = await request(endpoint, { method: "PUT", headers: { ...bridgeHeaders(session.accessKey), "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!response.ok) throw new Error(response.status === 409 ? "The bridge changed on another client. Reload MAGICUS and try again." : accessFailure(response.status).message);
+  return safe;
+}
+
 async function startDesktopShell() {
   const { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, net, safeStorage, shell, Tray } = require("electron");
   app.setName(APP_TITLE);
@@ -54,6 +132,7 @@ async function startDesktopShell() {
   let mainWindow;
   let tray;
   let isQuitting = false;
+  let bridgeSession = null;
   const focusWindow = () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     if (mainWindow.isMinimized()) mainWindow.restore();
@@ -104,7 +183,9 @@ async function startDesktopShell() {
   ipcMain.handle("magicus:validate-access", async (_event, payload) => {
     const accessKey = typeof payload?.accessKey === "string" ? payload.accessKey.trim() : "";
     if (!accessKey) return { ok: false, code: "missing", message: "Enter your access key to continue." };
-    return validateAccessKey(accessKey, net.fetch);
+    const result = await validateAccessKey(accessKey, net.fetch);
+    bridgeSession = result.ok ? { accessKey, account: result.account } : null;
+    return result;
   });
   ipcMain.handle("magicus:access-load", async () => {
     const saved = await readJson(credentialFile, null);
@@ -120,15 +201,29 @@ async function startDesktopShell() {
     return { ok: true };
   });
   ipcMain.handle("magicus:access-clear", async () => { await fs.rm(credentialFile, { force: true }); return { ok: true }; });
-  ipcMain.handle("magicus:workspace-load", () => readJson(workspaceFile, { folders: [] }));
+  ipcMain.handle("magicus:workspace-load", async () => {
+    const local = await readJson(workspaceFile, { folders: [], projects: [] });
+    if (!bridgeSession) return local;
+    const remote = await readBridgeWorkspace(bridgeSession, net.fetch);
+    // Only union a legacy/local-only record during its first bridge migration.
+    // Once a client has synced, the bridge is authoritative so deletions stay deleted.
+    const merged = remote.workspace && local?.sync?.status === "synced"
+      ? remote.workspace
+      : mergeWorkspace(local, remote.workspace || {});
+    const seeded = await writeBridgeWorkspace(bridgeSession, merged, net.fetch, remote.sha);
+    await writeJson(workspaceFile, seeded);
+    return seeded;
+  });
   ipcMain.handle("magicus:workspace-save", async (_event, workspace) => {
-    const safe = {
-      version: 4,
-      folders: Array.isArray(workspace?.folders) ? workspace.folders.slice(0, 100) : [],
-      projects: Array.isArray(workspace?.projects) ? workspace.projects.slice(0, 250) : [],
-      sync: { provider: "MAGICUS_BRIDGE", status: "local", updatedAt: new Date().toISOString() },
-    };
-    await writeJson(workspaceFile, safe); return { ok: true };
+    const safe = workspacePayload(workspace);
+    await writeJson(workspaceFile, safe);
+    if (!bridgeSession) return { ok: false, message: "Reconnect your private bridge before saving." };
+    try {
+      const current = await readBridgeWorkspace(bridgeSession, net.fetch);
+      const synced = await writeBridgeWorkspace(bridgeSession, safe, net.fetch, current.sha);
+      await writeJson(workspaceFile, synced);
+      return { ok: true };
+    } catch (error) { return { ok: false, message: error.message }; }
   });
   ipcMain.handle("magicus:launch-app", (_event, shortcut) => {
     let target; try { target = new URL(shortcut?.url); } catch { return { ok: false }; }
@@ -219,4 +314,4 @@ if (isElectronMainProcess()) {
   });
 }
 
-module.exports = { ALWAYS_ON_TOP_LEVEL, APP_TITLE, BRIDGE_REPOSITORY, accessFailure, isElectronMainProcess, keepWindowOnTop, validateAccessKey };
+module.exports = { ALWAYS_ON_TOP_LEVEL, APP_TITLE, BRIDGE_REPOSITORY, BRIDGE_WORKSPACE_PATH, accessFailure, bridgeHeaders, isElectronMainProcess, keepWindowOnTop, mergeWorkspace, readBridgeWorkspace, validateAccessKey, workspacePayload, writeBridgeWorkspace };
