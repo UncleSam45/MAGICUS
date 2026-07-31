@@ -52,6 +52,10 @@
           <button id="create-project" class="create-project"><span>＋</span><div><small>BEGIN A NEW STORY</small><strong>Create project</strong></div><b>→</b></button>
         </section>
         <section id="global-stats" class="global-stats" aria-label="Studio statistics"></section>
+        <section id="workspace-folders" class="workspace-folders">
+          <div class="section-heading"><div><p class="eyebrow">CREATIVE WORKSPACES</p><h3>Your folders &amp; apps</h3></div><button id="create-folder">＋ NEW FOLDER</button></div>
+          <div class="folder-workspace"><aside id="home-folder-list" class="home-folder-list"></aside><div id="home-folder-panel" class="home-folder-panel" aria-live="polite"></div></div>
+        </section>
         <section class="timeline-section">
           <div class="section-heading"><div><p class="eyebrow">ACTIVE PRODUCTIONS</p><h3>Project timelines</h3></div><span id="project-summary"></span></div>
           <div id="project-timelines" class="project-timelines" aria-live="polite"></div>
@@ -60,10 +64,6 @@
           <div class="section-heading"><div><p class="eyebrow">LOCAL MEDIA / DRAG TO ASSIGN</p><h3>Asset tray</h3></div><button id="open-vault">OPEN FULL VAULT ↗</button></div>
           <div class="tray-tools"><label class="tray-search"><span>⌕</span><input id="tray-search" type="search" placeholder="Search imported media…" aria-label="Search assets"></label><nav id="tray-filters"><button class="active" data-tray-filter="all">RECENT</button><button data-tray-filter="image">IMAGES</button><button data-tray-filter="video">VIDEO</button><button data-tray-filter="unassigned">UNASSIGNED</button></nav></div>
           <div id="home-asset-tray" class="home-asset-tray"></div>
-        </section>
-        <section id="workspace-folders" class="workspace-folders">
-          <div class="section-heading"><div><p class="eyebrow">CREATIVE WORKSPACES</p><h3>Your folders &amp; apps</h3></div><button id="create-folder">＋ NEW FOLDER</button></div>
-          <div class="folder-workspace"><aside id="home-folder-list" class="home-folder-list"></aside><div id="home-folder-panel" class="home-folder-panel" aria-live="polite"></div></div>
         </section>
       </div>
     </section>

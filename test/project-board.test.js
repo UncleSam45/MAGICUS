@@ -19,6 +19,10 @@ test("the production home still exposes and manages saved folders and apps", () 
   assert.match(html, /id="workspace-folders"/);
   assert.match(html, /id="home-folder-list"/);
   assert.match(html, /id="home-folder-panel"/);
+  assert.ok(
+    html.indexOf('id="workspace-folders"') < html.indexOf('id="project-timelines"'),
+    "folders appear above project timelines"
+  );
   assert.match(renderer, /function renderFolders\(\)/);
   assert.match(renderer, /function folderForm\(folder\)/);
   assert.match(renderer, /function appForm\(folder,app\)/);
