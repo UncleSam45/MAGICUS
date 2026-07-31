@@ -55,21 +55,57 @@ function bridgeHeaders(accessKey) {
   };
 }
 
-function workspacePayload(workspace) {
+function workspacePayload(workspace, updatedAt = new Date().toISOString()) {
   return {
     version: 4,
     folders: Array.isArray(workspace?.folders) ? workspace.folders.slice(0, 100) : [],
     projects: Array.isArray(workspace?.projects) ? workspace.projects.slice(0, 250) : [],
-    sync: { provider: "MAGICUS_BRIDGE", status: "synced", updatedAt: new Date().toISOString() },
+    sync: { provider: "MAGICUS_BRIDGE", status: "synced", updatedAt },
   };
+}
+
+function mergeWorkspace(local, remote) {
+  const localTime = Date.parse(local?.sync?.updatedAt || "") || 0;
+  const remoteTime = Date.parse(remote?.sync?.updatedAt || "") || 0;
+  const preferred = localTime > remoteTime ? local : remote;
+  const other = preferred === local ? remote : local;
+  const mergeById = (preferredItems, otherItems, combine) => {
+    const result = (Array.isArray(preferredItems) ? preferredItems : []).map(item => ({ ...item }));
+    for (const item of Array.isArray(otherItems) ? otherItems : []) {
+      const index = result.findIndex(candidate => candidate.id === item.id);
+      if (index < 0) result.push({ ...item });
+      else if (combine) result[index] = combine(result[index], item);
+    }
+    return result;
+  };
+  const folders = mergeById(preferred?.folders, other?.folders, (winner, older) => ({
+    ...older,
+    ...winner,
+    apps: mergeById(winner.apps, older.apps),
+  }));
+  return workspacePayload({
+    folders,
+    projects: mergeById(preferred?.projects, other?.projects),
+  });
 }
 
 async function readBridgeWorkspace(session, request) {
   const endpoint = `https://api.github.com/repos/${encodeURIComponent(session.account)}/${BRIDGE_REPOSITORY}/contents/${BRIDGE_WORKSPACE_PATH}`;
-  const response = await request(endpoint, { headers: bridgeHeaders(session.accessKey) });
+  const requestMetadata = () => request(endpoint, { cache: "no-store", headers: { ...bridgeHeaders(session.accessKey), "Cache-Control": "no-cache" } });
+  let response = await requestMetadata();
   if (response.status === 404) return { workspace: null, sha: null };
   if (!response.ok) throw new Error(accessFailure(response.status).message);
-  const record = await response.json();
+  let record;
+  try {
+    record = await response.json();
+  } catch {
+    // Electron's network cache can occasionally yield a successful response
+    // with an empty body. Retry once rather than preventing desktop login.
+    response = await requestMetadata();
+    if (response.status === 404) return { workspace: null, sha: null };
+    if (!response.ok) throw new Error(accessFailure(response.status).message);
+    try { record = await response.json(); } catch { throw new Error("MAGICUS_BRIDGE returned an empty response. Please try syncing again."); }
+  }
   if (!record?.content && Number(record?.size) === 0) return { workspace: null, sha: record.sha || null };
   let content;
   if (record?.content) {
@@ -81,7 +117,8 @@ async function readBridgeWorkspace(session, request) {
     content = await rawResponse.text();
   }
   try {
-    return { workspace: workspacePayload(JSON.parse(content)), sha: record.sha };
+    const parsed = JSON.parse(content);
+    return { workspace: workspacePayload(parsed, parsed?.sync?.updatedAt), sha: record.sha };
   } catch {
     throw new Error("The bridge workspace is empty or invalid JSON. Repair .magicus/workspace.json, then sign in again.");
   }
@@ -118,6 +155,7 @@ async function startDesktopShell() {
   const dataDirectory = path.join(app.getPath("userData"), "workspace");
   const assetDirectory = path.join(dataDirectory, "assets");
   const workspaceFile = path.join(dataDirectory, "workspace.json");
+  const workspaceBackupFile = path.join(dataDirectory, "workspace.backup.json");
   const assetFile = path.join(dataDirectory, "assets.json");
   const credentialFile = path.join(dataDirectory, "access.json");
   await fs.mkdir(assetDirectory, { recursive: true });
@@ -127,6 +165,12 @@ async function startDesktopShell() {
   const writeJson = async (file, value) => {
     await fs.mkdir(path.dirname(file), { recursive: true });
     await fs.writeFile(file, JSON.stringify(value, null, 2), "utf8");
+  };
+  const hasWorkspaceData = value => (Array.isArray(value?.folders) && value.folders.length > 0) || (Array.isArray(value?.projects) && value.projects.length > 0);
+  const writeWorkspace = async value => {
+    const current = await readJson(workspaceFile, null);
+    if (hasWorkspaceData(current)) await writeJson(workspaceBackupFile, current);
+    await writeJson(workspaceFile, value);
   };
   const mediaType = (file) => {
     const extension = path.extname(file).toLowerCase();
@@ -176,22 +220,31 @@ async function startDesktopShell() {
   });
   ipcMain.handle("magicus:access-clear", async () => { await fs.rm(credentialFile, { force: true }); return { ok: true }; });
   ipcMain.handle("magicus:workspace-load", async () => {
-    const local = await readJson(workspaceFile, { folders: [], projects: [] });
+    let local = await readJson(workspaceFile, { folders: [], projects: [] });
+    const backup = await readJson(workspaceBackupFile, null);
+    if (!hasWorkspaceData(local) && hasWorkspaceData(backup)) local = backup;
     if (!bridgeSession) return local;
-    const remote = await readBridgeWorkspace(bridgeSession, net.fetch);
-    if (remote.workspace) { await writeJson(workspaceFile, remote.workspace); return remote.workspace; }
-    const seeded = await writeBridgeWorkspace(bridgeSession, local, net.fetch, remote.sha);
-    await writeJson(workspaceFile, seeded);
-    return seeded;
+    try {
+      const remote = await readBridgeWorkspace(bridgeSession, net.fetch);
+      // Never let an incomplete bridge erase records that still exist locally.
+      const merged = mergeWorkspace(local, remote.workspace || {});
+      const seeded = await writeBridgeWorkspace(bridgeSession, merged, net.fetch, remote.sha);
+      await writeWorkspace(seeded);
+      return seeded;
+    } catch (error) {
+      // A temporary/malformed GitHub response must not lock users out of their
+      // desktop data. Saves will retry the bridge and report a concrete error.
+      return { ...local, sync: { ...(local.sync || {}), provider: "MAGICUS_BRIDGE", status: "offline", error: error.message } };
+    }
   });
   ipcMain.handle("magicus:workspace-save", async (_event, workspace) => {
     const safe = workspacePayload(workspace);
-    await writeJson(workspaceFile, safe);
+    await writeWorkspace({ ...safe, sync: { ...safe.sync, status: "pending" } });
     if (!bridgeSession) return { ok: false, message: "Reconnect your private bridge before saving." };
     try {
       const current = await readBridgeWorkspace(bridgeSession, net.fetch);
       const synced = await writeBridgeWorkspace(bridgeSession, safe, net.fetch, current.sha);
-      await writeJson(workspaceFile, synced);
+      await writeWorkspace(synced);
       return { ok: true };
     } catch (error) { return { ok: false, message: error.message }; }
   });
@@ -284,4 +337,4 @@ if (isElectronMainProcess()) {
   });
 }
 
-module.exports = { ALWAYS_ON_TOP_LEVEL, APP_TITLE, BRIDGE_REPOSITORY, BRIDGE_WORKSPACE_PATH, accessFailure, bridgeHeaders, isElectronMainProcess, keepWindowOnTop, readBridgeWorkspace, validateAccessKey, workspacePayload, writeBridgeWorkspace };
+module.exports = { ALWAYS_ON_TOP_LEVEL, APP_TITLE, BRIDGE_REPOSITORY, BRIDGE_WORKSPACE_PATH, accessFailure, bridgeHeaders, isElectronMainProcess, keepWindowOnTop, mergeWorkspace, readBridgeWorkspace, validateAccessKey, workspacePayload, writeBridgeWorkspace };

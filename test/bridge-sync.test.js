@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { BRIDGE_WORKSPACE_PATH, readBridgeWorkspace, workspacePayload, writeBridgeWorkspace } = require("../main");
+const { BRIDGE_WORKSPACE_PATH, mergeWorkspace, readBridgeWorkspace, workspacePayload, writeBridgeWorkspace } = require("../main");
 
 const response = (status, body = {}) => ({
   ok: status >= 200 && status < 300,
@@ -72,4 +72,71 @@ test("downloads GitHub's raw representation when base64 content is omitted", asy
   );
   assert.equal(calls, 2);
   assert.deepEqual(result.workspace.folders, [{ id: "large" }]);
+});
+
+test("merges existing local data into an empty bridge instead of erasing it", () => {
+  const local = {
+    folders: [{ id: "local-folder", name: "Local", apps: [{ id: "local-app" }] }],
+    projects: [{ id: "local-project", name: "Recovered" }],
+    sync: { updatedAt: "2025-01-01T00:00:00.000Z" },
+  };
+  const remote = { folders: [], projects: [], sync: { updatedAt: "2026-01-01T00:00:00.000Z" } };
+  const merged = mergeWorkspace(local, remote);
+  assert.deepEqual(merged.folders.map(item => item.id), ["local-folder"]);
+  assert.deepEqual(merged.projects.map(item => item.id), ["local-project"]);
+});
+
+test("restores records from both clients and prefers the newer copy on collisions", () => {
+  const local = {
+    folders: [{ id: "shared", name: "Old", apps: [{ id: "local-app" }] }],
+    projects: [{ id: "local-project" }],
+    sync: { updatedAt: "2025-01-01T00:00:00.000Z" },
+  };
+  const remote = {
+    folders: [{ id: "shared", name: "New", apps: [{ id: "remote-app" }] }],
+    projects: [{ id: "remote-project" }],
+    sync: { updatedAt: "2026-01-01T00:00:00.000Z" },
+  };
+  const merged = mergeWorkspace(local, remote);
+  assert.equal(merged.folders[0].name, "New");
+  assert.deepEqual(merged.folders[0].apps.map(item => item.id), ["remote-app", "local-app"]);
+  assert.deepEqual(merged.projects.map(item => item.id), ["remote-project", "local-project"]);
+});
+
+test("retries an empty successful metadata response with cache disabled", async () => {
+  let calls = 0;
+  const result = await readBridgeWorkspace(
+    { account: "arcana", accessKey: "secret" },
+    async (_url, options) => {
+      calls += 1;
+      assert.equal(options.cache, "no-store");
+      assert.equal(options.headers["Cache-Control"], "no-cache");
+      if (calls === 1) return { ...response(200), json: async () => { throw new SyntaxError("Unexpected end of JSON input"); } };
+      return response(200, { sha: "recovered", content: Buffer.from('{"folders":[],"projects":[]}').toString("base64") });
+    },
+  );
+  assert.equal(calls, 2);
+  assert.equal(result.sha, "recovered");
+});
+
+test("replaces repeated JSON parser failures with a bridge-specific error", async () => {
+  await assert.rejects(
+    readBridgeWorkspace(
+      { account: "arcana", accessKey: "secret" },
+      async () => ({ ...response(200), json: async () => { throw new SyntaxError("Unexpected end of JSON input"); } }),
+    ),
+    /MAGICUS_BRIDGE returned an empty response/,
+  );
+});
+
+test("browser restore bypasses caches and treats bridge data as authoritative", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const renderer = fs.readFileSync(path.join(__dirname, "..", "renderer.js"), "utf8");
+  const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+  assert.match(renderer, /cache:"no-store"/);
+  assert.match(renderer, /"Cache-Control":"no-cache"/);
+  assert.match(renderer, /if\(hasBrowserWorkspaceData\(remote\)\)workspace=remote/);
+  assert.match(renderer, /const latest=await browserBridgeRead\(\)/);
+  assert.match(html, /renderer\.js\?v=7/);
 });
