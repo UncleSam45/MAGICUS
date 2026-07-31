@@ -46,12 +46,14 @@ async function validateAccessKey(accessKey, request) {
 }
 
 async function startDesktopShell() {
-  const { app, BrowserWindow, dialog, ipcMain, net, safeStorage, shell } = require("electron");
+  const { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, net, safeStorage, shell, Tray } = require("electron");
   app.setName(APP_TITLE);
   app.setAppUserModelId("com.magicus.studio");
 
   if (!app.requestSingleInstanceLock()) return app.quit();
   let mainWindow;
+  let tray;
+  let isQuitting = false;
   const focusWindow = () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     if (mainWindow.isMinimized()) mainWindow.restore();
@@ -120,7 +122,12 @@ async function startDesktopShell() {
   ipcMain.handle("magicus:access-clear", async () => { await fs.rm(credentialFile, { force: true }); return { ok: true }; });
   ipcMain.handle("magicus:workspace-load", () => readJson(workspaceFile, { folders: [] }));
   ipcMain.handle("magicus:workspace-save", async (_event, workspace) => {
-    const safe = { folders: Array.isArray(workspace?.folders) ? workspace.folders.slice(0, 100) : [] };
+    const safe = {
+      version: 4,
+      folders: Array.isArray(workspace?.folders) ? workspace.folders.slice(0, 100) : [],
+      projects: Array.isArray(workspace?.projects) ? workspace.projects.slice(0, 250) : [],
+      sync: { provider: "MAGICUS_BRIDGE", status: "local", updatedAt: new Date().toISOString() },
+    };
     await writeJson(workspaceFile, safe); return { ok: true };
   });
   ipcMain.handle("magicus:launch-app", (_event, shortcut) => {
@@ -164,6 +171,15 @@ async function startDesktopShell() {
   });
   keepWindowOnTop(mainWindow);
   mainWindow.removeMenu();
+  const traySvg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><rect x="5" y="5" width="22" height="22" rx="3" transform="rotate(45 16 16)" fill="#111216" stroke="#d9b879"/><path d="M10 21V11h2.5l3.5 5.7 3.5-5.7H22v10h-2.5v-6l-3.5 5.3-3.5-5.3v6z" fill="#f2eee5"/></svg>`;
+  tray = new Tray(nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(traySvg).toString("base64")}`));
+  tray.setToolTip("MAGICUS — running in the background");
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: "Open MAGICUS", click: focusWindow },
+    { type: "separator" },
+    { label: "Quit MAGICUS", click: () => { isQuitting = true; app.quit(); } },
+  ]));
+  tray.on("click", focusWindow);
   // `ready-to-show` can be withheld by some GPU/Windows configurations.  Do
   // not make the application's visibility depend on that optional event.
   const revealWindow = () => {
@@ -171,7 +187,12 @@ async function startDesktopShell() {
   };
   mainWindow.once("ready-to-show", revealWindow);
   const revealFallback = setTimeout(revealWindow, 2500);
-  mainWindow.on("closed", () => { mainWindow = null; app.quit(); });
+  mainWindow.on("close", (event) => {
+    if (isQuitting) return;
+    event.preventDefault();
+    mainWindow.hide();
+  });
+  mainWindow.on("closed", () => { mainWindow = null; });
   try {
     await mainWindow.loadFile(path.join(__dirname, "index.html"));
     revealWindow();
@@ -179,7 +200,8 @@ async function startDesktopShell() {
     clearTimeout(revealFallback);
   }
   app.on("activate", focusWindow);
-  app.on("window-all-closed", () => app.quit());
+  app.on("before-quit", () => { isQuitting = true; });
+  app.on("window-all-closed", () => { /* MAGICUS remains available from the system tray. */ });
 }
 
 function isElectronMainProcess(runtime = process) {

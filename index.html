@@ -39,14 +39,33 @@
       <p class="edition">MAGICUS · PRIVATE EDITION</p>
     </section>
 
-    <section id="studio" class="view studio workspace" aria-labelledby="studio-title">
-      <header class="workspace-header"><div class="workspace-brand"><div class="mini-sigil">M</div><div><span>MAGICUS</span><small>PRIVATE WORKSPACE</small></div></div><div class="workspace-greeting"><span id="studio-title">Welcome, <b id="display-name"></b></span><div class="connection"><i></i>LOCAL + BRIDGE READY</div></div></header>
-      <aside class="folder-rail"><div class="rail-line"></div><div id="folder-list" class="folder-list"></div><button id="add-folder" class="folder-add" aria-label="Create folder"><span>＋</span><small>NEW</small></button></aside>
-      <section class="workspace-stage">
-        <div class="stage-intro"><p class="eyebrow">YOUR CREATIVE UNIVERSE</p><h2>Everything in its place.</h2><p>Select a collection to reveal your tools, or begin with a new folder.</p></div>
-        <div id="folder-panel" class="folder-panel" aria-live="polite"></div>
-      </section>
-      <button id="assets-button" class="assets-button"><span>◇</span><div><small>LOCAL LIBRARY</small><strong>Assets</strong></div><b id="asset-count">0</b></button>
+    <section id="studio" class="view studio production-home" aria-labelledby="studio-title">
+      <header class="production-header">
+        <div class="workspace-brand"><div class="mini-sigil">M</div><div><span>MAGICUS</span><small>PRODUCTION COMMAND</small></div></div>
+        <nav class="studio-nav" aria-label="Studio sections"><button class="active" data-scroll-section="project-timelines">PROJECTS</button><button data-scroll-section="workspace-folders">FOLDERS</button><button id="assets-button">ASSET VAULT <b id="asset-count">0</b></button></nav>
+        <div class="workspace-greeting"><span id="studio-title">Director / <b id="display-name"></b></span><div class="connection"><i></i>LOCAL + BRIDGE READY</div></div>
+      </header>
+      <div class="production-scroll">
+        <section class="command-hero">
+          <div class="hero-orbit" aria-hidden="true"><i></i><i></i><b>M</b></div>
+          <div><p class="eyebrow">VISUAL PRODUCTION SYSTEM / HOME</p><h2>Shape the work.<br><em>See the whole story.</em></h2><p>Build living timelines from your local media library. Every frame stays yours.</p></div>
+          <button id="create-project" class="create-project"><span>＋</span><div><small>BEGIN A NEW STORY</small><strong>Create project</strong></div><b>→</b></button>
+        </section>
+        <section id="global-stats" class="global-stats" aria-label="Studio statistics"></section>
+        <section class="timeline-section">
+          <div class="section-heading"><div><p class="eyebrow">ACTIVE PRODUCTIONS</p><h3>Project timelines</h3></div><span id="project-summary"></span></div>
+          <div id="project-timelines" class="project-timelines" aria-live="polite"></div>
+        </section>
+        <section class="home-tray">
+          <div class="section-heading"><div><p class="eyebrow">LOCAL MEDIA / DRAG TO ASSIGN</p><h3>Asset tray</h3></div><button id="open-vault">OPEN FULL VAULT ↗</button></div>
+          <div class="tray-tools"><label class="tray-search"><span>⌕</span><input id="tray-search" type="search" placeholder="Search imported media…" aria-label="Search assets"></label><nav id="tray-filters"><button class="active" data-tray-filter="all">RECENT</button><button data-tray-filter="image">IMAGES</button><button data-tray-filter="video">VIDEO</button><button data-tray-filter="unassigned">UNASSIGNED</button></nav></div>
+          <div id="home-asset-tray" class="home-asset-tray"></div>
+        </section>
+        <section id="workspace-folders" class="workspace-folders">
+          <div class="section-heading"><div><p class="eyebrow">CREATIVE WORKSPACES</p><h3>Your folders &amp; apps</h3></div><button id="create-folder">＋ NEW FOLDER</button></div>
+          <div class="folder-workspace"><aside id="home-folder-list" class="home-folder-list"></aside><div id="home-folder-panel" class="home-folder-panel" aria-live="polite"></div></div>
+        </section>
+      </div>
     </section>
   </main>
 
@@ -62,6 +81,7 @@
     <div id="asset-grid" class="asset-grid"></div>
   </div>
   <div id="viewer" class="viewer" aria-hidden="true"><button data-close-viewer>×</button><div id="viewer-content"></div></div>
+  <section id="project-album" class="project-album" aria-hidden="true"></section>
   <script src="renderer.js"></script>
 </body>
 </html>

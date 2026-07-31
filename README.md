@@ -29,3 +29,22 @@ directory. Workspace configuration and the local media index remain available
 offline and are structured for future `MAGICUS_BRIDGE` synchronization. Opening
 `index.html` in a browser provides a browser-safe fallback using localStorage,
 IndexedDB, and popup windows.
+
+## Production board
+
+Update 4 turns Home into a visual production board. Projects keep their name,
+creation date, optional description and cover, ordering, and ordered asset ID
+associations in the versioned workspace record. Dragging media onto a timeline
+only records the existing library asset ID, so files are never copied and one
+asset can belong to several projects. Albums provide playback, fullscreen media
+viewing, filters, ordering, removal, and live image/video/duration statistics.
+The persisted workspace includes local synchronization metadata reserved for a
+future `MAGICUS_BRIDGE` provider.
+
+The production board also retains the original folder and website-shortcut
+workspace. Existing folders and apps are shown in **Creative Workspaces**, where
+they can still be opened, created, edited, removed, and reordered.
+
+Closing the main desktop window hides MAGICUS instead of ending the process.
+Use the MAGICUS system-tray menu to reopen the command center or explicitly
+quit the application.
