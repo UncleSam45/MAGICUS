@@ -2,3 +2,6 @@ venv/
 .venv/
 __pycache__/
 *.py[cod]
+node_modules/
+.crowdnet-studio.pid
+npm-debug.log*
