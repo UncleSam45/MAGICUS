@@ -1,4 +1,4 @@
-"""CROWDNET_STUDIO bootstrapper.
+"""MAGICUS bootstrapper.
 
 This file deliberately uses only the Python standard library so a fresh checkout
 can prepare and launch the desktop application with ``python main.py``.
@@ -17,10 +17,10 @@ import time
 import uuid
 
 
-APP_NAME = "CROWDNET_STUDIO"
-APP_MARKER = "--crowdnet-studio-instance"
+APP_NAME = "MAGICUS"
+APP_MARKER = "--magicus-instance"
 PROJECT_DIR = Path(__file__).resolve().parent
-PID_FILE = PROJECT_DIR / ".crowdnet-studio.pid"
+PID_FILE = PROJECT_DIR / ".magicus.pid"
 PACKAGE_FILE = PROJECT_DIR / "package.json"
 
 
@@ -66,10 +66,10 @@ def ensure_package_configuration() -> None:
         return
 
     package = {
-        "name": "crowdnet-studio",
+        "name": "magicus",
         "version": "0.1.0",
         "private": True,
-        "description": "CROWDNET_STUDIO desktop application",
+        "description": "MAGICUS private creative studio",
         "main": "main.js",
         "scripts": {"start": "electron ."},
         "devDependencies": {"electron": "^37.2.4"},
@@ -134,7 +134,7 @@ def process_command(pid: int) -> str:
 
 def stop_previous_instance() -> None:
     if not PID_FILE.exists():
-        log("No previous CROWDNET_STUDIO instance found.")
+        log("No previous MAGICUS instance found.")
         return
     try:
         record = json.loads(PID_FILE.read_text(encoding="utf-8"))
@@ -152,7 +152,7 @@ def stop_previous_instance() -> None:
         PID_FILE.unlink(missing_ok=True)
         return
 
-    log(f"Stopping the previous CROWDNET_STUDIO instance (PID {pid})...")
+    log(f"Stopping the previous MAGICUS instance (PID {pid})...")
     try:
         if os.name == "nt":
             subprocess.run(
