@@ -1,7 +1,6 @@
-venv/
-.venv/
-__pycache__/
-*.py[cod]
 node_modules/
-.crowdnet-studio.pid
+*.pid
+.magicus.pid
+.env
+.env.*
 npm-debug.log*
