@@ -129,14 +129,15 @@ test("replaces repeated JSON parser failures with a bridge-specific error", asyn
   );
 });
 
-test("browser restore bypasses caches and treats bridge data as authoritative", () => {
+test("browser restore bypasses caches without a CORS-breaking request header", () => {
   const fs = require("node:fs");
   const path = require("node:path");
   const renderer = fs.readFileSync(path.join(__dirname, "..", "renderer.js"), "utf8");
   const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
   assert.match(renderer, /cache:"no-store"/);
-  assert.match(renderer, /"Cache-Control":"no-cache"/);
+  assert.match(renderer, /contents\/\$\{bridgePath\}\?_=/);
+  assert.doesNotMatch(renderer, /"Cache-Control":"no-cache"/);
   assert.match(renderer, /if\(hasBrowserWorkspaceData\(remote\)\)workspace=remote/);
   assert.match(renderer, /const latest=await browserBridgeRead\(\)/);
-  assert.match(html, /renderer\.js\?v=7/);
+  assert.match(html, /renderer\.js\?v=8/);
 });
