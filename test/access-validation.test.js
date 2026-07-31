@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { isElectronMainProcess, validateAccessKey } = require("../main.js");
+const { ALWAYS_ON_TOP_LEVEL, isElectronMainProcess, keepWindowOnTop, validateAccessKey } = require("../main.js");
 
 const response = (status, body = {}) => ({
   ok: status >= 200 && status < 300,
@@ -43,4 +43,12 @@ test("recognizes Electron's browser process without relying on require.main", ()
   assert.equal(isElectronMainProcess({ versions: { electron: "37.2.4" }, type: "browser" }), true);
   assert.equal(isElectronMainProcess({ versions: { electron: "37.2.4" }, type: "renderer" }), false);
   assert.equal(isElectronMainProcess({ versions: { node: "24.0.0" } }), false);
+});
+
+test("keeps Electron windows in the floating always-on-top level", () => {
+  const calls = [];
+  const window = { setAlwaysOnTop: (...args) => calls.push(args) };
+  assert.equal(keepWindowOnTop(window), window);
+  assert.deepEqual(calls, [[true, ALWAYS_ON_TOP_LEVEL]]);
+  assert.equal(ALWAYS_ON_TOP_LEVEL, "floating");
 });

@@ -1,60 +1,67 @@
-const $ = (selector) => document.querySelector(selector);
-const splash = $("#splash");
-const login = $("#login");
-const studio = $("#studio");
-const form = $("#access-form");
-const username = $("#username");
-const accessKey = $("#access-key");
-const errorBox = $("#error");
-const submit = form.querySelector(".enter");
+const $ = (selector, root = document) => root.querySelector(selector);
+const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+const desktop = Boolean(window.magicus);
+const splash = $("#splash"); const login = $("#login"); const studio = $("#studio");
+const form = $("#access-form"); const username = $("#username"); const accessKey = $("#access-key");
+const errorBox = $("#error"); const submit = form.querySelector(".enter");
+const rememberAccess = $("#remember-access");
+let workspace = { folders: [] }; let activeFolderId = null; let assets = []; let assetFilter = "all";
+const uid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
 
-for (let index = 0; index < 34; index += 1) {
-  const particle = document.createElement("i");
-  particle.className = "particle";
-  particle.style.left = `${Math.random() * 100}%`;
-  particle.style.top = `${Math.random() * 100 + 30}%`;
-  particle.style.setProperty("--duration", `${7 + Math.random() * 10}s`);
-  particle.style.animationDelay = `${-Math.random() * 12}s`;
-  $("#particles").appendChild(particle);
+for (let index = 0; index < 34; index += 1) { const particle = document.createElement("i"); particle.className = "particle"; particle.style.left = `${Math.random() * 100}%`; particle.style.top = `${Math.random() * 100 + 30}%`; particle.style.setProperty("--duration", `${7 + Math.random() * 10}s`); particle.style.animationDelay = `${-Math.random() * 12}s`; $("#particles").appendChild(particle); }
+async function restoreRememberedAccess() {
+  try {
+    const saved = desktop ? await window.magicus.loadRememberedAccess() : JSON.parse(localStorage.getItem("magicus-remembered-access"));
+    if (saved?.username && saved?.accessKey) { username.value = saved.username; accessKey.value = saved.accessKey; rememberAccess.checked = true; }
+  } catch { /* A damaged or unavailable local credential store is ignored. */ }
+}
+restoreRememberedAccess();
+setTimeout(() => { splash.classList.add("depart"); setTimeout(() => { splash.classList.remove("active"); login.classList.add("active"); (username.value ? accessKey : username).focus(); }, 650); }, 1800);
+$("#reveal").addEventListener("click", (event) => { const concealed = accessKey.type === "password"; accessKey.type = concealed ? "text" : "password"; event.currentTarget.textContent = concealed ? "HIDE" : "VIEW"; });
+function showError(message) { errorBox.textContent = message; errorBox.classList.remove("show"); requestAnimationFrame(() => errorBox.classList.add("show")); }
+
+async function loadWorkspace() { try { workspace = desktop ? await window.magicus.loadWorkspace() : JSON.parse(localStorage.getItem("magicus-workspace")) || { folders: [] }; } catch { workspace = { folders: [] }; } workspace.folders ||= []; renderWorkspace(); }
+async function saveWorkspace() { if (desktop) await window.magicus.saveWorkspace(workspace); else localStorage.setItem("magicus-workspace", JSON.stringify(workspace)); }
+form.addEventListener("submit", async (event) => { event.preventDefault(); const displayName = username.value.trim(); const key = accessKey.value.trim(); if (!displayName || !key) return showError("Complete both fields to enter MAGICUS."); errorBox.classList.remove("show"); submit.classList.add("loading"); submit.disabled = true; accessKey.value = ""; let result; try { result = desktop ? await window.magicus.validateAccess(key) : { ok: true }; } catch { result = { ok: false, message: "Access validation is temporarily unavailable. Please try again." }; } submit.classList.remove("loading"); submit.disabled = false; if (!result.ok) return showError(result.message); if (rememberAccess.checked) { const remembered = desktop ? await window.magicus.rememberAccess({ username: displayName, accessKey: key }) : (localStorage.setItem("magicus-remembered-access", JSON.stringify({ username: displayName, accessKey: key })), { ok: true }); if (!remembered.ok) return showError(remembered.message); } else if (desktop) await window.magicus.forgetAccess(); else localStorage.removeItem("magicus-remembered-access"); $("#display-name").textContent = displayName; login.classList.remove("active"); await loadWorkspace(); await loadAssets(); setTimeout(() => studio.classList.add("active"), 250); });
+
+function renderWorkspace() {
+  const list = $("#folder-list"); list.innerHTML = workspace.folders.map((folder, index) => `<button class="folder-tile ${folder.id === activeFolderId ? "active" : ""}" data-folder="${folder.id}" draggable="true" style="--delay:${index * 45}ms" title="Drag to reorder ${escapeHtml(folder.name)}"><i class="folder-grip" aria-hidden="true">⋮⋮</i><span>${escapeHtml(folder.icon || "✦")}</span><small>${escapeHtml(folder.name)}</small><b>${folder.apps?.length || 0}</b></button>`).join("");
+  const folder = workspace.folders.find((item) => item.id === activeFolderId);
+  const panel = $("#folder-panel");
+  if (!folder) { panel.classList.remove("open"); panel.innerHTML = workspace.folders.length ? "" : `<div class="empty-workspace"><span>✦</span><strong>Create your first collection</strong><p>Organize websites into focused spaces.</p><button data-create-folder>CREATE FOLDER</button></div>`; return; }
+  panel.innerHTML = `<div class="panel-heading"><div><p>COLLECTION / ${String(workspace.folders.indexOf(folder) + 1).padStart(2, "0")}</p><h3>${escapeHtml(folder.name)}</h3><span>${folder.apps?.length || 0} connected ${folder.apps?.length === 1 ? "tool" : "tools"}</span></div><div class="panel-actions"><button data-add-app>＋ ADD APP</button><button data-rename-folder title="Rename">✎</button><button data-delete-folder title="Delete">⌫</button><button data-close-folder title="Close">×</button></div></div><div class="app-grid">${(folder.apps || []).map((app, i) => `<article class="app-card" style="--delay:${i * 55}ms"><button class="app-launch" data-launch-app="${app.id}"><span class="app-icon">${app.icon?.startsWith("data:") ? `<img src="${app.icon}" alt="">` : escapeHtml(app.icon || "↗")}</span><div><strong>${escapeHtml(app.name)}</strong><small>${escapeHtml(new URL(app.url).hostname)}</small></div><b>↗</b></button><div class="app-tools"><button data-edit-app="${app.id}">EDIT</button><button data-delete-app="${app.id}">REMOVE</button></div></article>`).join("") || `<div class="empty-apps"><span>＋</span><strong>No tools here yet</strong><p>Add a website shortcut to begin.</p><button data-add-app>ADD YOUR FIRST APP</button></div>`}</div>`;
+  requestAnimationFrame(() => panel.classList.add("open"));
 }
 
-setTimeout(() => {
-  splash.classList.add("depart");
-  setTimeout(() => { splash.classList.remove("active"); login.classList.add("active"); username.focus(); }, 650);
-}, 3100);
+function showForm({ title, eyebrow, fields, submitText, onSubmit }) { const layer = $("#modal-layer"); const modal = $("#form-modal"); modal.innerHTML = `<button class="modal-close" type="button" data-close-modal aria-label="Close dialog">×</button><p class="eyebrow">${eyebrow}</p><h2>${title}</h2><form>${fields}<div class="modal-error"></div><button class="modal-submit" type="submit">${submitText}<b>→</b></button></form>`; layer.classList.add("open"); layer.setAttribute("aria-hidden", "false"); requestAnimationFrame(() => { const firstInput = $("input:not([type=radio])", modal); firstInput?.focus({ preventScroll: true }); firstInput?.select(); }); $("form", modal).addEventListener("submit", async (event) => { event.preventDefault(); const data = Object.fromEntries(new FormData(event.currentTarget)); try { await onSubmit(data); closeModal(); } catch (error) { $(".modal-error", modal).textContent = error.message; } }); }
+function closeModal() { $("#modal-layer").classList.remove("open"); $("#modal-layer").setAttribute("aria-hidden", "true"); }
+function folderForm(folder) { showForm({ eyebrow: folder ? "EDIT COLLECTION" : "NEW COLLECTION", title: folder ? "Rename your folder." : "Create a new space.", submitText: folder ? "SAVE CHANGES" : "CREATE FOLDER", fields: `<label>Folder name</label><input name="name" maxlength="32" required value="${escapeHtml(folder?.name || "")}" placeholder="e.g. Daily tools"><label>Symbol</label><div class="icon-options">${["✦","◈","◇","✺","⌘","△"].map(icon => `<label><input type="radio" name="icon" value="${icon}" ${icon === (folder?.icon || "✦") ? "checked" : ""}><span>${icon}</span></label>`).join("")}</div>`, onSubmit: async ({ name, icon }) => { name = name.trim(); if (!name) throw new Error("Give this collection a name."); if (folder) Object.assign(folder, { name, icon }); else { const created = { id: uid(), name, icon, apps: [] }; workspace.folders.push(created); activeFolderId = created.id; } await saveWorkspace(); renderWorkspace(); } }); }
+function appForm(folder, app) { showForm({ eyebrow: app ? "EDIT SHORTCUT" : "NEW WEBSITE APP", title: app ? "Refine this shortcut." : "Connect a new tool.", submitText: app ? "SAVE APP" : "ADD TO FOLDER", fields: `<label>App name</label><input name="name" maxlength="40" required value="${escapeHtml(app?.name || "")}" placeholder="e.g. Notion"><label>Website URL</label><input name="url" type="url" required value="${escapeHtml(app?.url || "https://")}" placeholder="https://example.com"><label>Icon / emoji</label><input name="icon" maxlength="8" value="${escapeHtml(app?.icon || "↗")}" placeholder="✦">`, onSubmit: async ({ name, url, icon }) => { name = name.trim(); try { const parsed = new URL(url); if (!["http:", "https:"].includes(parsed.protocol)) throw new Error(); url = parsed.href; } catch { throw new Error("Enter a complete http or https website URL."); } if (!name) throw new Error("Give this app a name."); if (app) Object.assign(app, { name, url, icon }); else (folder.apps ||= []).push({ id: uid(), name, url, icon }); await saveWorkspace(); renderWorkspace(); } }); }
 
-$("#reveal").addEventListener("click", (event) => {
-  const concealed = accessKey.type === "password";
-  accessKey.type = concealed ? "text" : "password";
-  event.currentTarget.textContent = concealed ? "HIDE" : "VIEW";
-  event.currentTarget.setAttribute("aria-label", concealed ? "Hide access key" : "Show access key");
+$("#studio").addEventListener("click", async (event) => { const target = event.target.closest("button"); if (!target) return; if (target.id === "add-folder" || target.matches("[data-create-folder]")) return folderForm(); if (target.dataset.folder) { activeFolderId = activeFolderId === target.dataset.folder ? null : target.dataset.folder; return renderWorkspace(); } const folder = workspace.folders.find(item => item.id === activeFolderId); if (!folder) return; if (target.matches("[data-close-folder]")) { activeFolderId = null; return renderWorkspace(); } if (target.matches("[data-add-app]")) return appForm(folder); if (target.matches("[data-rename-folder]")) return folderForm(folder); if (target.matches("[data-delete-folder]") && confirm(`Delete “${folder.name}” and all its shortcuts?`)) { workspace.folders = workspace.folders.filter(item => item.id !== folder.id); activeFolderId = null; await saveWorkspace(); return renderWorkspace(); } const app = folder.apps?.find(item => item.id === (target.dataset.editApp || target.dataset.deleteApp || target.dataset.launchApp)); if (target.dataset.editApp) return appForm(folder, app); if (target.dataset.deleteApp && confirm(`Remove “${app.name}”?`)) { folder.apps = folder.apps.filter(item => item.id !== app.id); await saveWorkspace(); return renderWorkspace(); } if (target.dataset.launchApp) { if (desktop) window.magicus.launchApp(app); else window.open(app.url, `magicus-${app.id}`, "popup,width=1180,height=780,noopener,noreferrer"); } });
+let draggedFolderId = null;
+$("#folder-list").addEventListener("dragstart", event => { const tile = event.target.closest("[data-folder]"); if (!tile) return; draggedFolderId = tile.dataset.folder; tile.classList.add("dragging"); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", draggedFolderId); });
+$("#folder-list").addEventListener("dragover", event => { event.preventDefault(); const tile = event.target.closest("[data-folder]"); $$(".folder-tile.drop-before, .folder-tile.drop-after").forEach(item => item.classList.remove("drop-before", "drop-after")); if (!tile || tile.dataset.folder === draggedFolderId) return; const after = event.clientY > tile.getBoundingClientRect().top + tile.offsetHeight / 2; tile.classList.add(after ? "drop-after" : "drop-before"); event.dataTransfer.dropEffect = "move"; });
+$("#folder-list").addEventListener("drop", async event => { event.preventDefault(); const target = event.target.closest("[data-folder]"); if (!target || !draggedFolderId || target.dataset.folder === draggedFolderId) return; const from = workspace.folders.findIndex(folder => folder.id === draggedFolderId); let to = workspace.folders.findIndex(folder => folder.id === target.dataset.folder); const after = event.clientY > target.getBoundingClientRect().top + target.offsetHeight / 2; const [moved] = workspace.folders.splice(from, 1); if (from < to) to -= 1; workspace.folders.splice(to + (after ? 1 : 0), 0, moved); await saveWorkspace(); renderWorkspace(); });
+$("#folder-list").addEventListener("dragend", () => { draggedFolderId = null; $$(".folder-tile").forEach(item => item.classList.remove("dragging", "drop-before", "drop-after")); });
+$(".modal-backdrop").addEventListener("click", closeModal);
+$("#form-modal").addEventListener("click", event => {
+  // Keep all input interaction inside the dialog. In particular, do not let a
+  // click on a label or field reach the dismissible backdrop.
+  event.stopPropagation();
+  if (event.target.closest("[data-close-modal]")) closeModal();
 });
 
-function showError(message) {
-  errorBox.textContent = message;
-  errorBox.classList.remove("show");
-  requestAnimationFrame(() => errorBox.classList.add("show"));
-}
-
-form.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const displayName = username.value.trim();
-  const key = accessKey.value.trim();
-  if (!displayName || !key) return showError("Complete both fields to enter MAGICUS.");
-
-  errorBox.classList.remove("show");
-  submit.classList.add("loading");
-  submit.disabled = true;
-  accessKey.value = "";
-  accessKey.type = "password";
-  let result;
-  try { result = await window.magicus.validateAccess(key); }
-  catch { result = { ok: false, message: "Access validation is temporarily unavailable. Please try again." }; }
-  submit.classList.remove("loading");
-  submit.disabled = false;
-  if (!result.ok) { showError(result.message); accessKey.focus(); return; }
-
-  $("#display-name").textContent = displayName;
-  login.classList.remove("active");
-  setTimeout(() => studio.classList.add("active"), 350);
-});
+function openAssetDb() { return new Promise((resolve, reject) => { const request = indexedDB.open("magicus-assets", 1); request.onupgradeneeded = () => request.result.createObjectStore("assets", { keyPath: "id" }); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); }); }
+async function browserAssetOperation(mode, value) { const db = await openAssetDb(); return new Promise((resolve, reject) => { const tx = db.transaction("assets", mode === "read" ? "readonly" : "readwrite"); const store = tx.objectStore("assets"); const request = mode === "read" ? store.getAll() : mode === "delete" ? store.delete(value) : store.put(value); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); }); }
+async function loadAssets() { assets = desktop ? await window.magicus.loadAssets() : await browserAssetOperation("read"); if (!desktop) assets.forEach(asset => { if (asset.blob) asset.url = URL.createObjectURL(asset.blob); }); renderAssets(); }
+function renderAssets() { $("#asset-count").textContent = assets.length; const visible = assetFilter === "all" ? assets : assets.filter(a => a.type === assetFilter); $("#asset-grid").innerHTML = visible.map(asset => `<article class="asset-card" data-id="${asset.id}"><button class="asset-preview" data-view-asset="${asset.id}">${asset.type === "video" ? `<video src="${asset.url}" muted preload="metadata"></video><span class="play">▶</span>` : `<img src="${asset.url}" alt="${escapeHtml(asset.name)}">`}</button><div><strong title="${escapeHtml(asset.name)}">${escapeHtml(asset.name)}</strong><small>${asset.type.toUpperCase()} · ${formatBytes(asset.size)}</small><button data-delete-asset="${asset.id}" aria-label="Delete ${escapeHtml(asset.name)}">⌫</button></div></article>`).join("") || `<div class="empty-assets"><span>◇</span><strong>${assets.length ? "Nothing in this view" : "Your library is quiet"}</strong><p>${assets.length ? "Try another filter." : "Import an image or video to see it here."}</p></div>`; }
+const formatBytes = bytes => bytes > 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+async function importBrowserFiles(files) { const valid = [...files].filter(file => file.type.startsWith("image/") || file.type.startsWith("video/")); const results = []; for (const file of valid) { const asset = { id: uid(), name: file.name, type: file.type.startsWith("video/") ? "video" : "image", importedAt: new Date().toISOString(), size: file.size, blob: file, url: URL.createObjectURL(file) }; await browserAssetOperation("write", asset); results.push({ ok: true, asset }); } return results.concat([...files].filter(f => !valid.includes(f)).map(f => ({ ok: false, name: f.name, error: "Unsupported media type" }))); }
+async function handleImport(promise) { const status = $("#import-status"); status.className = "import-status active"; status.textContent = "Importing into the MAGICUS vault…"; try { const results = await promise; const successful = results.filter(r => r.ok); status.className = `import-status active ${successful.length ? "success" : "error"}`; status.textContent = successful.length ? `✓ ${successful.length} asset${successful.length === 1 ? "" : "s"} safely imported${results.length > successful.length ? ` · ${results.length - successful.length} failed` : ""}` : `Import failed · ${results[0]?.error || "No supported files selected"}`; await loadAssets(); } catch (error) { status.className = "import-status active error"; status.textContent = `Import failed · ${error.message}`; } }
+$("#assets-button").addEventListener("click", () => { $("#asset-drawer").classList.add("open"); $("#asset-drawer").setAttribute("aria-hidden", "false"); });
+$("#asset-drawer").addEventListener("click", async event => { const button = event.target.closest("button"); if (!button) return; if (button.matches("[data-close-assets]")) { $("#asset-drawer").classList.remove("open"); return; } if (button.id === "choose-assets") { if (desktop) return handleImport(window.magicus.selectAssets()); const input = document.createElement("input"); input.type = "file"; input.multiple = true; input.accept = "image/*,video/*"; input.onchange = () => handleImport(importBrowserFiles(input.files)); input.click(); } if (button.dataset.filter) { assetFilter = button.dataset.filter; $$("[data-filter]").forEach(item => item.classList.toggle("active", item === button)); renderAssets(); } const asset = assets.find(a => a.id === (button.dataset.deleteAsset || button.dataset.viewAsset)); if (button.dataset.deleteAsset && confirm(`Permanently delete “${asset.name}” and its managed copy?`)) { if (desktop) await window.magicus.deleteAsset(asset.id); else await browserAssetOperation("delete", asset.id); await loadAssets(); } if (button.dataset.viewAsset) { $("#viewer-content").innerHTML = asset.type === "video" ? `<video src="${asset.url}" controls autoplay></video>` : `<img src="${asset.url}" alt="${escapeHtml(asset.name)}">`; $("#viewer").classList.add("open"); } });
+const dropZone = $("#drop-zone"); ["dragenter", "dragover"].forEach(type => dropZone.addEventListener(type, event => { event.preventDefault(); dropZone.classList.add("dragging"); })); ["dragleave", "drop"].forEach(type => dropZone.addEventListener(type, event => { event.preventDefault(); dropZone.classList.remove("dragging"); })); dropZone.addEventListener("drop", event => handleImport(desktop ? window.magicus.importDroppedAssets([...event.dataTransfer.files]) : importBrowserFiles(event.dataTransfer.files)));
+$("#viewer").addEventListener("click", event => { if (event.target === $("#viewer") || event.target.closest("[data-close-viewer]")) { $("#viewer").classList.remove("open"); $("#viewer-content").innerHTML = ""; } });
+document.addEventListener("keydown", event => { if (event.key === "Escape") { closeModal(); $("#asset-drawer").classList.remove("open"); $("#viewer").classList.remove("open"); } });

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob: file:; media-src 'self' blob: file:; connect-src https:">
   <title>MAGICUS</title>
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -30,6 +30,7 @@
           <div class="field"><input id="username" name="username" autocomplete="nickname" maxlength="60" placeholder="Your display name"><span class="field-glow"></span></div>
           <label for="access-key">Access Key</label>
           <div class="field"><input id="access-key" name="accessKey" type="password" autocomplete="off" spellcheck="false" placeholder="Enter your private access key"><button id="reveal" type="button" aria-label="Show access key">VIEW</button><span class="field-glow"></span></div>
+          <label class="remember-option"><input id="remember-access" type="checkbox"><span class="remember-check">✓</span><span><strong>Remember me on this device</strong><small>Store username and credentials locally</small></span></label>
           <div id="error" class="error" role="alert" aria-live="polite"></div>
           <button class="enter" type="submit"><span class="button-copy">ENTER MAGICUS</span><span class="loader" aria-hidden="true"></span><b>→</b></button>
         </form>
@@ -38,11 +39,29 @@
       <p class="edition">MAGICUS · PRIVATE EDITION</p>
     </section>
 
-    <section id="studio" class="view studio" aria-labelledby="studio-title">
-      <header><div class="login-brand"><div class="mini-sigil">M</div><span>MAGICUS</span></div><div class="connection"><i></i>BRIDGE ACTIVE</div></header>
-      <div class="studio-center"><p class="eyebrow">WELCOME TO THE INNER CIRCLE</p><h2 id="studio-title">Good to see you, <span id="display-name"></span>.</h2><p>Your private workspace is ready.</p><div class="bridge-card"><div class="bridge-icon">↗</div><div><small>PRIVATE BRIDGE</small><strong>MAGICUS_BRIDGE</strong></div><span>CONNECTED</span></div><div class="placeholder"><i></i><p>THE STUDIO IS TAKING SHAPE</p><small>Your creative instruments will arrive here soon.</small></div></div>
+    <section id="studio" class="view studio workspace" aria-labelledby="studio-title">
+      <header class="workspace-header"><div class="workspace-brand"><div class="mini-sigil">M</div><div><span>MAGICUS</span><small>PRIVATE WORKSPACE</small></div></div><div class="workspace-greeting"><span id="studio-title">Welcome, <b id="display-name"></b></span><div class="connection"><i></i>LOCAL + BRIDGE READY</div></div></header>
+      <aside class="folder-rail"><div class="rail-line"></div><div id="folder-list" class="folder-list"></div><button id="add-folder" class="folder-add" aria-label="Create folder"><span>＋</span><small>NEW</small></button></aside>
+      <section class="workspace-stage">
+        <div class="stage-intro"><p class="eyebrow">YOUR CREATIVE UNIVERSE</p><h2>Everything in its place.</h2><p>Select a collection to reveal your tools, or begin with a new folder.</p></div>
+        <div id="folder-panel" class="folder-panel" aria-live="polite"></div>
+      </section>
+      <button id="assets-button" class="assets-button"><span>◇</span><div><small>LOCAL LIBRARY</small><strong>Assets</strong></div><b id="asset-count">0</b></button>
     </section>
   </main>
+
+  <div id="modal-layer" class="modal-layer" aria-hidden="true">
+    <div class="modal-backdrop" data-close-modal></div><section id="form-modal" class="modal form-modal" role="dialog" aria-modal="true"></section>
+  </div>
+  <div id="asset-drawer" class="asset-drawer" aria-hidden="true">
+    <button class="drawer-close" data-close-assets aria-label="Close assets">×</button>
+    <header><p class="eyebrow">MAGICUS LOCAL VAULT</p><h2>Asset Library</h2><p>Originals are copied into private, managed storage.</p></header>
+    <div id="drop-zone" class="drop-zone"><div class="drop-glyph">⇣</div><strong>Drop images or videos here</strong><span>or</span><button id="choose-assets">Choose files</button><small>PNG, JPG, WEBP, GIF, MP4, WEBM, MOV · multiple files supported</small></div>
+    <div id="import-status" class="import-status" aria-live="polite"></div>
+    <nav class="asset-filters"><button class="active" data-filter="all">All</button><button data-filter="image">Images</button><button data-filter="video">Videos</button></nav>
+    <div id="asset-grid" class="asset-grid"></div>
+  </div>
+  <div id="viewer" class="viewer" aria-hidden="true"><button data-close-viewer>×</button><div id="viewer-content"></div></div>
   <script src="renderer.js"></script>
 </body>
 </html>
