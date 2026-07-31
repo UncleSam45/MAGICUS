@@ -135,8 +135,54 @@ def process_command(pid: int) -> str:
         return ""
 
 
+def stop_process_tree(pid: int) -> None:
+    """Stop an Electron process and all of the renderer processes it owns."""
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/PID", str(pid), "/T", "/F"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return
+    os.killpg(os.getpgid(pid), signal.SIGTERM)
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and process_command(pid):
+        time.sleep(0.1)
+    if process_command(pid):
+        os.killpg(os.getpgid(pid), signal.SIGKILL)
+
+
+def stop_orphaned_project_electron() -> None:
+    """Remove Windows Electron processes left behind without a PID record.
+
+    A terminated bootstrapper can disappear before cleaning up its PID file,
+    while an Electron renderer still holds files in ``node_modules`` open.  An
+    exact executable-path match keeps this cleanup scoped to this checkout.
+    """
+    if os.name != "nt":
+        return
+    runtime = PROJECT_DIR / "node_modules" / "electron" / "dist" / "electron.exe"
+    if not runtime.exists():
+        return
+    escaped_runtime = str(runtime.resolve()).replace("'", "''")
+    script = (
+        f"Get-CimInstance Win32_Process | Where-Object {{ $_.ExecutablePath -eq '{escaped_runtime}' }} "
+        "| ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
+    )
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", script],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if result.returncode == 0:
+        log("Cleared any orphaned Electron processes for this project.")
+
+
 def stop_previous_instance() -> None:
     if not PID_FILE.exists():
+        stop_orphaned_project_electron()
         log("No previous MAGICUS instance found.")
         return
     try:
@@ -146,6 +192,7 @@ def stop_previous_instance() -> None:
     except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
         log("Discarding an invalid stale instance file.")
         PID_FILE.unlink(missing_ok=True)
+        stop_orphaned_project_electron()
         return
 
     command = process_command(pid)
@@ -153,26 +200,15 @@ def stop_previous_instance() -> None:
     if not command or expected_argument not in command:
         log("Discarding a stale instance file; its process is no longer active.")
         PID_FILE.unlink(missing_ok=True)
+        stop_orphaned_project_electron()
         return
 
     log(f"Stopping the previous MAGICUS instance (PID {pid})...")
     try:
-        if os.name == "nt":
-            subprocess.run(
-                ["taskkill", "/PID", str(pid), "/T", "/F"],
-                check=False,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        else:
-            os.killpg(os.getpgid(pid), signal.SIGTERM)
-            deadline = time.monotonic() + 5
-            while time.monotonic() < deadline and process_command(pid):
-                time.sleep(0.1)
-            if process_command(pid):
-                os.killpg(os.getpgid(pid), signal.SIGKILL)
+        stop_process_tree(pid)
     except (ProcessLookupError, PermissionError):
         pass
+    stop_orphaned_project_electron()
     PID_FILE.unlink(missing_ok=True)
     log("Previous instance stopped.")
 
@@ -193,10 +229,7 @@ def launch(electron: Path) -> int:
         return process.wait()
     except KeyboardInterrupt:
         log("Shutdown requested.")
-        if os.name == "nt":
-            process.terminate()
-        else:
-            os.killpg(process.pid, signal.SIGTERM)
+        stop_process_tree(process.pid)
         return process.wait()
     finally:
         try:

@@ -307,8 +307,8 @@ async function startDesktopShell() {
   const revealFallback = setTimeout(revealWindow, 2500);
   mainWindow.on("close", (event) => {
     if (isQuitting) return;
-    event.preventDefault();
-    mainWindow.hide();
+    isQuitting = true;
+    app.quit();
   });
   mainWindow.on("closed", () => { mainWindow = null; });
   try {
@@ -318,8 +318,11 @@ async function startDesktopShell() {
     clearTimeout(revealFallback);
   }
   app.on("activate", focusWindow);
-  app.on("before-quit", () => { isQuitting = true; });
-  app.on("window-all-closed", () => { /* MAGICUS remains available from the system tray. */ });
+  app.on("before-quit", () => {
+    isQuitting = true;
+    if (tray && !tray.isDestroyed()) tray.destroy();
+  });
+  app.on("window-all-closed", () => app.quit());
 }
 
 function isElectronMainProcess(runtime = process) {
