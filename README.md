@@ -24,11 +24,13 @@ being written locally; leaving the option unchecked removes any previously saved
 credential. Folder order can be changed by dragging collections in the left rail
 and is saved with the rest of the workspace.
 
-Imported assets are copied into MAGICUS' Electron `userData/workspace/assets`
-directory. Workspace configuration and the local media index remain available
-offline and are structured for future `MAGICUS_BRIDGE` synchronization. Opening
-`index.html` in a browser provides a browser-safe fallback using localStorage,
-IndexedDB, and popup windows.
+Workspace configuration is synchronized to `.magicus/workspace.json` in the
+authenticated account's private `MAGICUS_BRIDGE` repository after every change
+and downloaded at sign-in, so projects, folders, and shortcuts follow the user
+between desktop and browser clients. Imported assets are intentionally excluded:
+they remain in Electron's `userData/workspace/assets` directory or the browser's
+IndexedDB. Opening `index.html` directly therefore requires network access to the
+GitHub API for bridge authentication and workspace synchronization.
 
 ## Production board
 
