@@ -19,6 +19,10 @@ test("the production home still exposes and manages saved folders and apps", () 
   assert.match(html, /id="workspace-folders"/);
   assert.match(html, /id="home-folder-list"/);
   assert.match(html, /id="home-folder-panel"/);
+  assert.ok(
+    html.indexOf('id="workspace-folders"') < html.indexOf('id="project-timelines"'),
+    "folders appear above project timelines"
+  );
   assert.match(renderer, /function renderFolders\(\)/);
   assert.match(renderer, /function folderForm\(folder\)/);
   assert.match(renderer, /function appForm\(folder,app\)/);
@@ -50,12 +54,14 @@ test("desktop workspace persistence retains versioned project sync data", () => 
   assert.match(main, /provider: "MAGICUS_BRIDGE"/);
 });
 
-test("desktop close hides to a tray with an explicit quit action", () => {
+test("desktop close fully quits Electron and destroys its tray", () => {
   const main = read("main.js");
   assert.match(main, /new Tray\(/);
   assert.match(main, /label: "Open MAGICUS"/);
   assert.match(main, /label: "Quit MAGICUS"/);
   assert.match(main, /mainWindow\.on\("close", \(event\)/);
-  assert.match(main, /event\.preventDefault\(\);\s*mainWindow\.hide\(\)/);
-  assert.match(main, /app\.on\("before-quit", \(\) => \{ isQuitting = true/);
+  assert.match(main, /isQuitting = true;\s*app\.quit\(\)/);
+  assert.match(main, /app\.on\("before-quit", \(\) => \{\s*isQuitting = true/);
+  assert.match(main, /tray\.destroy\(\)/);
+  assert.match(main, /app\.on\("window-all-closed", \(\) => app\.quit\(\)\)/);
 });

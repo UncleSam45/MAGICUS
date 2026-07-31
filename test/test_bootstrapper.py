@@ -33,6 +33,31 @@ class BootstrapperTests(unittest.TestCase):
             self.assertEqual(bootstrapper.main(), 0)
         self.assertEqual(events, ["stop", "install"])
 
+    def test_windows_shutdown_kills_the_complete_electron_process_tree(self):
+        with (
+            mock.patch.object(bootstrapper.os, "name", "nt"),
+            mock.patch.object(bootstrapper.subprocess, "run") as run,
+        ):
+            bootstrapper.stop_process_tree(4172)
+        self.assertEqual(run.call_args.args[0], ["taskkill", "/PID", "4172", "/T", "/F"])
+
+    def test_windows_orphan_cleanup_is_limited_to_the_project_runtime(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            runtime = root / "node_modules" / "electron" / "dist" / "electron.exe"
+            runtime.parent.mkdir(parents=True)
+            runtime.touch()
+            with (
+                mock.patch.object(bootstrapper, "PROJECT_DIR", root),
+                mock.patch.object(bootstrapper.os, "name", "nt"),
+                mock.patch.object(bootstrapper.subprocess, "run") as run,
+            ):
+                run.return_value.returncode = 0
+                bootstrapper.stop_orphaned_project_electron()
+        command = run.call_args.args[0]
+        self.assertEqual(command[:3], ["powershell", "-NoProfile", "-Command"])
+        self.assertIn(str(runtime.resolve()), command[3])
+
 
 if __name__ == "__main__":
     unittest.main()
