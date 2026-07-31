@@ -70,8 +70,21 @@ async function readBridgeWorkspace(session, request) {
   if (response.status === 404) return { workspace: null, sha: null };
   if (!response.ok) throw new Error(accessFailure(response.status).message);
   const record = await response.json();
-  const content = Buffer.from(String(record.content || "").replace(/\s/g, ""), "base64").toString("utf8");
-  return { workspace: workspacePayload(JSON.parse(content)), sha: record.sha };
+  if (!record?.content && Number(record?.size) === 0) return { workspace: null, sha: record.sha || null };
+  let content;
+  if (record?.content) {
+    content = Buffer.from(String(record.content).replace(/\s/g, ""), "base64").toString("utf8");
+  } else {
+    // GitHub deliberately omits base64 `content` for files larger than 1 MB.
+    const rawResponse = await request(endpoint, { headers: { ...bridgeHeaders(session.accessKey), Accept: "application/vnd.github.raw+json" } });
+    if (!rawResponse.ok) throw new Error(accessFailure(rawResponse.status).message);
+    content = await rawResponse.text();
+  }
+  try {
+    return { workspace: workspacePayload(JSON.parse(content)), sha: record.sha };
+  } catch {
+    throw new Error("The bridge workspace is empty or invalid JSON. Repair .magicus/workspace.json, then sign in again.");
+  }
 }
 
 async function writeBridgeWorkspace(session, workspace, request, knownSha) {
@@ -167,7 +180,7 @@ async function startDesktopShell() {
     if (!bridgeSession) return local;
     const remote = await readBridgeWorkspace(bridgeSession, net.fetch);
     if (remote.workspace) { await writeJson(workspaceFile, remote.workspace); return remote.workspace; }
-    const seeded = await writeBridgeWorkspace(bridgeSession, local, net.fetch, null);
+    const seeded = await writeBridgeWorkspace(bridgeSession, local, net.fetch, remote.sha);
     await writeJson(workspaceFile, seeded);
     return seeded;
   });

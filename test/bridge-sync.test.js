@@ -50,3 +50,26 @@ test("workspace payload deliberately excludes the local asset vault", () => {
   assert.equal(safe.assets, undefined);
   assert.equal(safe.sync.provider, "MAGICUS_BRIDGE");
 });
+
+test("treats an empty bridge workspace as uninitialized", async () => {
+  const result = await readBridgeWorkspace(
+    { account: "arcana", accessKey: "secret" },
+    async () => response(200, { sha: "empty-sha", size: 0, content: "" }),
+  );
+  assert.deepEqual(result, { workspace: null, sha: "empty-sha" });
+});
+
+test("downloads GitHub's raw representation when base64 content is omitted", async () => {
+  let calls = 0;
+  const result = await readBridgeWorkspace(
+    { account: "arcana", accessKey: "secret" },
+    async (_url, options) => {
+      calls += 1;
+      if (calls === 1) return response(200, { sha: "large-sha", size: 1_100_000 });
+      assert.equal(options.headers.Accept, "application/vnd.github.raw+json");
+      return { ...response(200), text: async () => JSON.stringify({ folders: [{ id: "large" }], projects: [] }) };
+    },
+  );
+  assert.equal(calls, 2);
+  assert.deepEqual(result.workspace.folders, [{ id: "large" }]);
+});
