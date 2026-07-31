@@ -79,8 +79,11 @@ def ensure_package_configuration() -> None:
 
 
 def electron_executable() -> Path:
-    name = "electron.cmd" if os.name == "nt" else "electron"
-    return PROJECT_DIR / "node_modules" / ".bin" / name
+    shim_name = "electron.cmd" if os.name == "nt" else "electron"
+    shim = PROJECT_DIR / "node_modules" / ".bin" / shim_name
+    runtime_name = "electron.exe" if os.name == "nt" else "electron"
+    runtime = PROJECT_DIR / "node_modules" / "electron" / "dist" / runtime_name
+    return shim if shim.exists() else runtime
 
 
 def ensure_node_dependencies(npm: str) -> Path:
@@ -211,8 +214,10 @@ def main() -> int:
         require_command("node", "Node.js")
         npm = require_command("npm", "npm")
         ensure_package_configuration()
-        electron = ensure_node_dependencies(npm)
         stop_previous_instance()
+        # Stop our running Electron process before npm is allowed to inspect or
+        # repair node_modules. Windows locks Electron's icudtl.dat while in use.
+        electron = ensure_node_dependencies(npm)
         exit_code = launch(electron)
         log("Application closed cleanly.")
         return exit_code
