@@ -1,7 +1,9 @@
 # MAGICUS
 
-MAGICUS is a private Electron creative studio. This update provides its cinematic
-launch experience, secure access gate, and initial studio landing screen.
+MAGICUS is a private Electron creative studio. Its main workspace provides
+animated folders, persistent website shortcuts, dedicated app windows, and a
+managed local photo and video library. The static renderer stays isolated from
+filesystem access; all privileged operations pass through the preload bridge.
 
 ## Run
 
@@ -12,4 +14,16 @@ npm start
 
 Enter a local display name and an access key authorized for the authenticated
 account's private `MAGICUS_BRIDGE`. The key is passed through an isolated Electron
-bridge for validation, cleared from the interface immediately, and is never stored.
+bridge for validation and cleared from the interface immediately unless the user
+explicitly enables local credential storage.
+Users can explicitly opt into **Remember me on this device**. In Electron, the
+access key is encrypted with the operating system-backed `safeStorage` API before
+being written locally; leaving the option unchecked removes any previously saved
+credential. Folder order can be changed by dragging collections in the left rail
+and is saved with the rest of the workspace.
+
+Imported assets are copied into MAGICUS' Electron `userData/workspace/assets`
+directory. Workspace configuration and the local media index remain available
+offline and are structured for future `MAGICUS_BRIDGE` synchronization. Opening
+`index.html` in a browser provides a browser-safe fallback using localStorage,
+IndexedDB, and popup windows.
