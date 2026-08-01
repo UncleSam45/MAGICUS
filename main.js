@@ -15,6 +15,10 @@ function keepWindowOnTop(window) {
   return window;
 }
 
+function enforceAlwaysOnTop(app) {
+  app.on("browser-window-created", (_event, window) => keepWindowOnTop(window));
+}
+
 function accessFailure(status) {
   if (status === 401) return { ok: false, code: "invalid", message: "That access key is invalid or has expired." };
   if (status === 403) return { ok: false, code: "restricted", message: "This access key is not authorized for MAGICUS." };
@@ -138,6 +142,9 @@ async function startDesktopShell() {
   const { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, net, safeStorage, shell, Tray } = require("electron");
   app.setName(APP_TITLE);
   app.setAppUserModelId("com.magicus.studio");
+  // Cover every BrowserWindow, including windows introduced by future features
+  // or created indirectly by Electron rather than at the call sites below.
+  enforceAlwaysOnTop(app);
 
   if (!app.requestSingleInstanceLock()) return app.quit();
   let mainWindow;
@@ -340,4 +347,4 @@ if (isElectronMainProcess()) {
   });
 }
 
-module.exports = { ALWAYS_ON_TOP_LEVEL, APP_TITLE, BRIDGE_REPOSITORY, BRIDGE_WORKSPACE_PATH, accessFailure, bridgeHeaders, isElectronMainProcess, keepWindowOnTop, mergeWorkspace, readBridgeWorkspace, validateAccessKey, workspacePayload, writeBridgeWorkspace };
+module.exports = { ALWAYS_ON_TOP_LEVEL, APP_TITLE, BRIDGE_REPOSITORY, BRIDGE_WORKSPACE_PATH, accessFailure, bridgeHeaders, enforceAlwaysOnTop, isElectronMainProcess, keepWindowOnTop, mergeWorkspace, readBridgeWorkspace, validateAccessKey, workspacePayload, writeBridgeWorkspace };

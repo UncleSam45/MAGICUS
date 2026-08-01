@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { ALWAYS_ON_TOP_LEVEL, isElectronMainProcess, keepWindowOnTop, validateAccessKey } = require("../main.js");
+const { ALWAYS_ON_TOP_LEVEL, enforceAlwaysOnTop, isElectronMainProcess, keepWindowOnTop, validateAccessKey } = require("../main.js");
 
 const response = (status, body = {}) => ({
   ok: status >= 200 && status < 300,
@@ -51,4 +51,21 @@ test("keeps Electron windows in the floating always-on-top level", () => {
   assert.equal(keepWindowOnTop(window), window);
   assert.deepEqual(calls, [[true, ALWAYS_ON_TOP_LEVEL]]);
   assert.equal(ALWAYS_ON_TOP_LEVEL, "floating");
+});
+
+test("applies always-on-top to every BrowserWindow created by Electron", () => {
+  let createdWindowHandler;
+  const app = {
+    on: (event, handler) => {
+      assert.equal(event, "browser-window-created");
+      createdWindowHandler = handler;
+    },
+  };
+  const calls = [];
+  const window = { setAlwaysOnTop: (...args) => calls.push(args) };
+
+  enforceAlwaysOnTop(app);
+  createdWindowHandler({}, window);
+
+  assert.deepEqual(calls, [[true, ALWAYS_ON_TOP_LEVEL]]);
 });

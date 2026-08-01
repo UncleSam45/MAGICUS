@@ -4,8 +4,9 @@ MAGICUS is a private Electron creative studio. Its main workspace provides
 animated folders, persistent website shortcuts, dedicated app windows, and a
 managed local photo and video library. The static renderer stays isolated from
 filesystem access; all privileged operations pass through the preload bridge.
-The main workspace and dedicated website windows use Electron's floating
-always-on-top level so MAGICUS remains visible above standard desktop windows.
+Every Electron browser window uses the floating always-on-top level so the main
+workspace, dedicated website windows, and any future windows remain visible
+above standard desktop windows.
 
 ## Run
 
