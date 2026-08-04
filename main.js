@@ -1,5 +1,3 @@
-/* MAGICUS desktop shell. Access credentials stay in Electron's main process. */
-
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const fs = require("node:fs/promises");
@@ -103,8 +101,6 @@ async function readBridgeWorkspace(session, request) {
   try {
     record = await response.json();
   } catch {
-    // Electron's network cache can occasionally yield a successful response
-    // with an empty body. Retry once rather than preventing desktop login.
     response = await requestMetadata();
     if (response.status === 404) return { workspace: null, sha: null };
     if (!response.ok) throw new Error(accessFailure(response.status).message);
@@ -115,7 +111,6 @@ async function readBridgeWorkspace(session, request) {
   if (record?.content) {
     content = Buffer.from(String(record.content).replace(/\s/g, ""), "base64").toString("utf8");
   } else {
-    // GitHub deliberately omits base64 `content` for files larger than 1 MB.
     const rawResponse = await request(endpoint, { headers: { ...bridgeHeaders(session.accessKey), Accept: "application/vnd.github.raw+json" } });
     if (!rawResponse.ok) throw new Error(accessFailure(rawResponse.status).message);
     content = await rawResponse.text();
@@ -142,8 +137,6 @@ async function startDesktopShell() {
   const { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, net, safeStorage, shell, Tray } = require("electron");
   app.setName(APP_TITLE);
   app.setAppUserModelId("com.magicus.studio");
-  // Cover every BrowserWindow, including windows introduced by future features
-  // or created indirectly by Electron rather than at the call sites below.
   enforceAlwaysOnTop(app);
 
   if (!app.requestSingleInstanceLock()) return app.quit();
@@ -233,14 +226,11 @@ async function startDesktopShell() {
     if (!bridgeSession) return local;
     try {
       const remote = await readBridgeWorkspace(bridgeSession, net.fetch);
-      // Never let an incomplete bridge erase records that still exist locally.
       const merged = mergeWorkspace(local, remote.workspace || {});
       const seeded = await writeBridgeWorkspace(bridgeSession, merged, net.fetch, remote.sha);
       await writeWorkspace(seeded);
       return seeded;
     } catch (error) {
-      // A temporary/malformed GitHub response must not lock users out of their
-      // desktop data. Saves will retry the bridge and report a concrete error.
       return { ...local, sync: { ...(local.sync || {}), provider: "MAGICUS_BRIDGE", status: "offline", error: error.message } };
     }
   });
@@ -305,8 +295,6 @@ async function startDesktopShell() {
     { label: "Quit MAGICUS", click: () => { isQuitting = true; app.quit(); } },
   ]));
   tray.on("click", focusWindow);
-  // `ready-to-show` can be withheld by some GPU/Windows configurations.  Do
-  // not make the application's visibility depend on that optional event.
   const revealWindow = () => {
     if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) mainWindow.show();
   };
@@ -335,13 +323,8 @@ async function startDesktopShell() {
 function isElectronMainProcess(runtime = process) {
   return Boolean(runtime?.versions?.electron && runtime?.type === "browser");
 }
-
-// Electron does not guarantee that its entry script is exposed as
-// `require.main`. Detect the documented main-process runtime instead, otherwise
-// Electron may stay alive without ever creating a BrowserWindow.
 if (isElectronMainProcess()) {
   startDesktopShell().catch((error) => {
-    // Deliberately log no request data or credentials.
     console.error(`[${APP_TITLE}] Startup failed:`, error?.message || "Unknown error");
     process.exitCode = 1;
   });

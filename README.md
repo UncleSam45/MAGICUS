@@ -1,53 +1,97 @@
 # MAGICUS
 
-MAGICUS is a private Electron creative studio. Its main workspace provides
-animated folders, persistent website shortcuts, dedicated app windows, and a
-managed local photo and video library. The static renderer stays isolated from
-filesystem access; all privileged operations pass through the preload bridge.
-Every Electron browser window uses the floating always-on-top level so the main
-workspace, dedicated website windows, and any future windows remain visible
-above standard desktop windows.
+> **Development status: PRE-ALPHA PROTOTYPE**
+>
+> MAGICUS is an early, experimental prototype. Features, data formats, setup,
+> and interface behavior may change or break without notice. It is not ready
+> for production use, and important data should not be stored in it without an
+> independent backup.
 
-## Run
+MAGICUS is a private desktop workspace for organizing creative projects, media,
+and web tools. It combines an Electron desktop application with an optional
+browser client and uses a private GitHub repository named `MAGICUS_BRIDGE` to
+synchronize workspace metadata.
+
+## Current capabilities
+
+- Organize website shortcuts into named, draggable folders.
+- Open shortcuts in dedicated always-on-top Electron windows.
+- Create and reorder production projects.
+- Add project descriptions, covers, and roadmap entries.
+- Import images and videos into a local asset library.
+- Assign the same local asset to multiple projects without duplicating it.
+- Browse, filter, preview, and remove imported media.
+- Synchronize folders, shortcuts, projects, and roadmap metadata through a
+  private `MAGICUS_BRIDGE` GitHub repository.
+- Optionally remember credentials using Electron's operating-system-backed
+  `safeStorage` encryption.
+- Keep the desktop process available through its system tray.
+
+## Prototype limitations
+
+- There are no stability, compatibility, migration, or data-retention
+  guarantees.
+- Automated tests cover selected behaviors, not the complete application.
+- Workspace synchronization depends directly on GitHub availability and API
+  behavior.
+- Imported media does not synchronize between devices. Electron stores it under
+  its local `userData/workspace/assets` directory; the browser uses IndexedDB.
+- Opening `index.html` as a browser client requires network access to GitHub.
+- The interface and workflows are still experimental and may be incomplete.
+
+## Requirements
+
+- Node.js with npm
+- A desktop environment supported by Electron
+- A GitHub access key that can access the authenticated account and its private
+  repository named `MAGICUS_BRIDGE`
+
+Python 3 is optional and is only needed when using the bootstrap launcher.
+
+## Install and run
+
+Install the Electron dependency and start the application:
 
 ```bash
 npm install
 npm start
 ```
 
-Enter a local display name and an access key authorized for the authenticated
-account's private `MAGICUS_BRIDGE`. The key is passed through an isolated Electron
-bridge for validation and cleared from the interface immediately unless the user
-explicitly enables local credential storage.
-Users can explicitly opt into **Remember me on this device**. In Electron, the
-access key is encrypted with the operating system-backed `safeStorage` API before
-being written locally; leaving the option unchecked removes any previously saved
-credential. Folder order can be changed by dragging collections in the left rail
-and is saved with the rest of the workspace.
+Alternatively, the standard-library Python bootstrapper can check the local
+runtime, install Electron when necessary, stop a previous MAGICUS instance, and
+launch the application:
 
-Workspace configuration is synchronized to `.magicus/workspace.json` in the
-authenticated account's private `MAGICUS_BRIDGE` repository after every change
-and downloaded at sign-in, so projects, folders, and shortcuts follow the user
-between desktop and browser clients. Imported assets are intentionally excluded:
-they remain in Electron's `userData/workspace/assets` directory or the browser's
-IndexedDB. Opening `index.html` directly therefore requires network access to the
-GitHub API for bridge authentication and workspace synchronization.
+```bash
+python main.py
+```
 
-## Production board
+At sign-in, enter a local display name and an access key authorized for the
+account's private `MAGICUS_BRIDGE` repository. MAGICUS validates the key through
+GitHub and clears it from the form unless **Remember me on this device** is
+enabled.
 
-Update 4 turns Home into a visual production board. Projects keep their name,
-creation date, optional description and cover, ordering, and ordered asset ID
-associations in the versioned workspace record. Dragging media onto a timeline
-only records the existing library asset ID, so files are never copied and one
-asset can belong to several projects. Albums provide playback, fullscreen media
-viewing, filters, ordering, removal, and live image/video/duration statistics.
-The persisted workspace includes local synchronization metadata reserved for a
-future `MAGICUS_BRIDGE` provider.
+## Data and synchronization
 
-The production board also retains the original folder and website-shortcut
-workspace. Existing folders and apps are shown in **Creative Workspaces**, where
-they can still be opened, created, edited, removed, and reordered.
+Workspace metadata is stored locally and synchronized after changes to:
 
-Closing the main desktop window hides MAGICUS instead of ending the process.
-Use the MAGICUS system-tray menu to reopen the command center or explicitly
-quit the application.
+```text
+MAGICUS_BRIDGE/.magicus/workspace.json
+```
+
+The synchronized record includes folders, website shortcuts, projects, project
+ordering, asset ID associations, roadmap entries, and synchronization metadata.
+Media files remain local and are excluded from the bridge record.
+
+On Electron, privileged filesystem, credential, window, and synchronization
+operations run in the main process. The renderer uses the isolated preload
+bridge and does not receive direct Node.js or filesystem access. The browser
+client communicates with GitHub directly and stores local media in IndexedDB.
+
+## Tests
+
+Run the JavaScript and Python test suites:
+
+```bash
+npm test
+python -m unittest discover -s test
+```

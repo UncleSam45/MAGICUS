@@ -30,7 +30,7 @@ test("folder rail supports persistent drag reordering", () => {
   assert.match(renderer, /addEventListener\("dragover"/);
   assert.match(renderer, /addEventListener\("drop"/);
   assert.match(renderer, /workspace\.folders\.splice/);
-  assert.match(renderer, /await saveWorkspace\(\); renderWorkspace\(\)/);
+  assert.match(renderer, /await saveWorkspace\(\);renderFolders\(\)/);
 });
 
 test("remembered access uses the controlled desktop bridge", () => {

@@ -1,9 +1,3 @@
-"""MAGICUS bootstrapper.
-
-This file deliberately uses only the Python standard library so a fresh checkout
-can prepare and launch the desktop application with ``python main.py``.
-"""
-
 from __future__ import annotations
 
 import json
@@ -35,12 +29,6 @@ def in_virtual_environment() -> bool:
 
 
 def confirm_python_environment() -> None:
-    """Report the interpreter in use.
-
-    The bootstrapper has no third-party Python dependencies. Requiring or
-    silently replacing the caller's environment would therefore add risk with
-    no benefit; an active virtual environment is detected and clearly reported.
-    """
     environment = "virtual environment" if in_virtual_environment() else "system environment"
     log(f"Python {sys.version_info.major}.{sys.version_info.minor} ({environment}): {sys.executable}")
     log("Python dependencies are satisfied (standard library only).")
@@ -136,7 +124,6 @@ def process_command(pid: int) -> str:
 
 
 def stop_process_tree(pid: int) -> None:
-    """Stop an Electron process and all of the renderer processes it owns."""
     if os.name == "nt":
         subprocess.run(
             ["taskkill", "/PID", str(pid), "/T", "/F"],
@@ -154,12 +141,6 @@ def stop_process_tree(pid: int) -> None:
 
 
 def stop_orphaned_project_electron() -> None:
-    """Remove Windows Electron processes left behind without a PID record.
-
-    A terminated bootstrapper can disappear before cleaning up its PID file,
-    while an Electron renderer still holds files in ``node_modules`` open.  An
-    exact executable-path match keeps this cleanup scoped to this checkout.
-    """
     if os.name != "nt":
         return
     runtime = PROJECT_DIR / "node_modules" / "electron" / "dist" / "electron.exe"
@@ -248,8 +229,6 @@ def main() -> int:
         npm = require_command("npm", "npm")
         ensure_package_configuration()
         stop_previous_instance()
-        # Stop our running Electron process before npm is allowed to inspect or
-        # repair node_modules. Windows locks Electron's icudtl.dat while in use.
         electron = ensure_node_dependencies(npm)
         exit_code = launch(electron)
         log("Application closed cleanly.")
