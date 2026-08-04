@@ -9,6 +9,14 @@ const APP_TITLE = "MAGICUS";
 const BRIDGE_REPOSITORY = "MAGICUS_BRIDGE";
 const BRIDGE_WORKSPACE_PATH = ".magicus/workspace.json";
 const ALWAYS_ON_TOP_LEVEL = "floating";
+const GOOGLE_PHOTOS_ALBUMS_URL = "https://photos.google.com/albums";
+
+function isGooglePhotosNavigation(value) {
+  try {
+    const target = new URL(value);
+    return target.protocol === "https:" && (target.hostname === "google.com" || target.hostname.endsWith(".google.com"));
+  } catch { return false; }
+}
 
 function keepWindowOnTop(window) {
   window.setAlwaysOnTop(true, ALWAYS_ON_TOP_LEVEL);
@@ -148,6 +156,7 @@ async function startDesktopShell() {
 
   if (!app.requestSingleInstanceLock()) return app.quit();
   let mainWindow;
+  let googlePhotosWindow;
   let tray;
   let isQuitting = false;
   let bridgeSession = null;
@@ -263,6 +272,32 @@ async function startDesktopShell() {
     win.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: "deny" }; });
     win.loadURL(target.href); return { ok: true };
   });
+  ipcMain.handle("magicus:google-photos-open", () => {
+    if (googlePhotosWindow && !googlePhotosWindow.isDestroyed()) {
+      if (googlePhotosWindow.isMinimized()) googlePhotosWindow.restore();
+      googlePhotosWindow.show(); googlePhotosWindow.focus();
+      return { ok: true, reused: true };
+    }
+    googlePhotosWindow = keepWindowOnTop(new BrowserWindow({
+      title: "Google Photos — MAGICUS Asset Vault",
+      width: 1120, height: 760, minWidth: 760, minHeight: 540,
+      autoHideMenuBar: true, alwaysOnTop: true, fullscreenable: false,
+      backgroundColor: "#111214",
+      webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, partition: "persist:magicus-google-photos", devTools: false },
+    }));
+    googlePhotosWindow.removeMenu();
+    googlePhotosWindow.webContents.setWindowOpenHandler(({ url }) => {
+      if (isGooglePhotosNavigation(url)) { googlePhotosWindow.loadURL(url); return { action: "deny" }; }
+      if (/^https?:/.test(url)) shell.openExternal(url);
+      return { action: "deny" };
+    });
+    googlePhotosWindow.webContents.on("will-navigate", (event, url) => {
+      if (!isGooglePhotosNavigation(url)) { event.preventDefault(); if (/^https?:/.test(url)) shell.openExternal(url); }
+    });
+    googlePhotosWindow.on("closed", () => { googlePhotosWindow = null; });
+    googlePhotosWindow.loadURL(GOOGLE_PHOTOS_ALBUMS_URL);
+    return { ok: true, reused: false };
+  });
   ipcMain.handle("magicus:assets-select", async () => {
     const result = await dialog.showOpenDialog(mainWindow, { properties: ["openFile", "multiSelections"], filters: [{ name: "Images & videos", extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp", "avif", "mp4", "webm", "mov", "m4v", "avi", "mkv"] }] });
     return result.canceled ? [] : importAssets(result.filePaths);
@@ -347,4 +382,4 @@ if (isElectronMainProcess()) {
   });
 }
 
-module.exports = { ALWAYS_ON_TOP_LEVEL, APP_TITLE, BRIDGE_REPOSITORY, BRIDGE_WORKSPACE_PATH, accessFailure, bridgeHeaders, enforceAlwaysOnTop, isElectronMainProcess, keepWindowOnTop, mergeWorkspace, readBridgeWorkspace, validateAccessKey, workspacePayload, writeBridgeWorkspace };
+module.exports = { ALWAYS_ON_TOP_LEVEL, APP_TITLE, BRIDGE_REPOSITORY, BRIDGE_WORKSPACE_PATH, GOOGLE_PHOTOS_ALBUMS_URL, accessFailure, bridgeHeaders, enforceAlwaysOnTop, isElectronMainProcess, isGooglePhotosNavigation, keepWindowOnTop, mergeWorkspace, readBridgeWorkspace, validateAccessKey, workspacePayload, writeBridgeWorkspace };
