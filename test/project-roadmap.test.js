@@ -31,3 +31,15 @@ test("project view manages bridge-backed roadmap milestones", () => {
   assert.match(renderer, /await saveWorkspace\(\);renderAlbum\(\);renderHome\(\)/);
   assert.match(renderer, /class="roadmap-layout"/);
 });
+
+
+test("roadmap notes are unlimited and long entries can be expanded", () => {
+  const renderer = read("renderer.js");
+  const styles = read("styles.css");
+  assert.doesNotMatch(renderer, /textarea name="description" maxlength="240"/);
+  assert.match(renderer, /class="roadmap-description-input" name="description"/);
+  assert.match(renderer, /data-expand-roadmap/);
+  assert.match(renderer, /aria-expanded="false"/);
+  assert.match(renderer, /prepareRoadmapDescriptions\(\)/);
+  assert.match(styles, /\.roadmap-description\.collapsed p/);
+});
