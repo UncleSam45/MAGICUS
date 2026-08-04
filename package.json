@@ -1,0 +1,14 @@
+{
+  "name": "magicus",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MAGICUS private creative studio",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "electron": "^37.2.4"
+  }
+}
