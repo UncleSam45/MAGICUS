@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 contextBridge.exposeInMainWorld("magicus", {
-  validateAccess: (accessKey) => ipcRenderer.invoke("magicus:validate-access", { accessKey }),
+  validateAccess: (server, accessKey) => ipcRenderer.invoke("magicus:validate-access", { server, accessKey }),
   loadRememberedAccess: () => ipcRenderer.invoke("magicus:access-load"),
   rememberAccess: (credentials) => ipcRenderer.invoke("magicus:access-save", credentials),
   forgetAccess: () => ipcRenderer.invoke("magicus:access-clear"),

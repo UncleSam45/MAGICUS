@@ -39,6 +39,17 @@ test("requires the expected repository to be private", async () => {
   assert.equal(result.code, "bridge");
 });
 
+test("validates the server selected by the connection form", async () => {
+  const calls = [];
+  const result = await validateAccessKey("key", async (url) => {
+    calls.push(url);
+    return calls.length === 1 ? response(200, { login: "arcana" }) : response(200, { name: "studio-server", private: true });
+  }, "studio-server");
+  assert.equal(result.ok, true);
+  assert.equal(result.bridge, "studio-server");
+  assert.match(calls[1], /arcana\/studio-server$/);
+});
+
 test("recognizes Electron's browser process without relying on require.main", () => {
   assert.equal(isElectronMainProcess({ versions: { electron: "37.2.4" }, type: "browser" }), true);
   assert.equal(isElectronMainProcess({ versions: { electron: "37.2.4" }, type: "renderer" }), false);
