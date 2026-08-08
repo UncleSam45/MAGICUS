@@ -27,9 +27,9 @@ test("floating connection logger submits credentials and exposes autofill API", 
   assert.match(html, /id="logger-form"[\s\S]*name="server"[\s\S]*name="accessKey"/);
   assert.match(renderer, /window\.crowdnetLogger = Object\.freeze/);
   assert.match(renderer, /crowdnet:logger-update/);
+  assert.match(renderer, /loggerForm\.addEventListener\("keydown"[\s\S]*event\.key !== "Enter"[\s\S]*loggerForm\.requestSubmit\(\)/);
   assert.match(renderer, /loggerForm\.addEventListener\("submit"/);
   assert.match(renderer, /logger\.classList\.add\("connected"\)/);
   assert.match(styles, /#crowdnet-connection-logger\.connected/);
   assert.match(styles, /@keyframes loggerDepart/);
 });
-
