@@ -67,9 +67,12 @@
   </main>
 
   <aside id="crowdnet-connection-logger" aria-label="Connection logger">
-    <div class="logger-shell"><div class="logger-scan"></div><header><div class="logger-title"><i class="logger-pulse"></i><h2>CONNECTION LOGGER</h2></div><span>LIVE FEED · 02</span></header>
-      <form id="logger-form" class="logger-fields"><label>SERVER<div class="logger-value"><input name="server" type="text" placeholder="AWAITING SERVER" autocomplete="off" spellcheck="false"></div></label><label>ACCESS KEY<div class="logger-value"><input name="accessKey" type="password" placeholder="AWAITING KEY" autocomplete="off" spellcheck="false"></div></label></form>
-      <div class="logger-confirm" aria-live="polite"><i>✓</i><span>CONNECTION CONFIRMED</span></div>
+    <div class="logger-shell"><div class="logger-scan"></div>
+      <div class="logger-success" role="status" aria-live="polite"><div><div class="logger-success-ring"><i class="logger-check"></i></div><p>ENCRYPTED ACCESS CONFIRMED</p><span>SECURE CHANNEL AUTHENTICATED</span></div></div>
+      <header><div class="logger-title"><i class="logger-pulse"></i><h2>CONNECTION LOGGER</h2></div><span>LIVE FEED · 02</span></header>
+      <form id="logger-form"><div class="logger-fields"><label>SERVER<div class="logger-value"><input name="server" type="text" placeholder="AWAITING SERVER" autocomplete="off" spellcheck="false"></div></label><label>ACCESSKEY<div class="logger-value"><input name="accessKey" type="password" placeholder="AWAITING KEY" autocomplete="off" spellcheck="false"></div></label><label class="logger-storage">STORAGE<div class="logger-value"><input name="storage" type="text" placeholder="AWAITING STORAGE" autocomplete="off" spellcheck="false"></div></label></div>
+        <div class="logger-actions"><span class="logger-security"><i></i> END-TO-END ENCRYPTED</span><button type="submit">CONFIRM <span aria-hidden="true">→</span></button></div>
+      </form>
     </div>
   </aside>
 
