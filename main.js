@@ -34,7 +34,15 @@ function accessFailure(status) {
   return { ok: false, code: "service", message: "Access validation is temporarily unavailable. Please try again." };
 }
 
-async function validateAccessKey(accessKey, request) {
+function normalizeServer(server) {
+  const value = String(server || "").trim();
+  if (!/^[A-Za-z0-9_.-]{1,100}$/.test(value)) return null;
+  return value;
+}
+
+async function validateAccessKey(accessKey, request, server = BRIDGE_REPOSITORY) {
+  const repositoryName = normalizeServer(server);
+  if (!repositoryName) return { ok: false, code: "missing", message: "Enter a valid server to continue." };
   const headers = {
     Accept: "application/vnd.github+json",
     Authorization: `Bearer ${accessKey}`,
@@ -48,11 +56,11 @@ async function validateAccessKey(accessKey, request) {
     if (!account?.login) return accessFailure(401);
 
     const owner = encodeURIComponent(account.login);
-    const repositoryResponse = await request(`https://api.github.com/repos/${owner}/${BRIDGE_REPOSITORY}`, { headers });
+    const repositoryResponse = await request(`https://api.github.com/repos/${owner}/${encodeURIComponent(repositoryName)}`, { headers });
     if (!repositoryResponse.ok) return accessFailure(repositoryResponse.status);
     const repository = await repositoryResponse.json();
-    if (repository?.name !== BRIDGE_REPOSITORY || repository?.private !== true) return accessFailure(404);
-    return { ok: true, account: account.login, bridge: BRIDGE_REPOSITORY };
+    if (repository?.name !== repositoryName || repository?.private !== true) return accessFailure(404);
+    return { ok: true, account: account.login, bridge: repositoryName };
   } catch {
     return accessFailure(0);
   }
@@ -102,7 +110,7 @@ function mergeWorkspace(local, remote) {
 }
 
 async function readBridgeWorkspace(session, request) {
-  const endpoint = `https://api.github.com/repos/${encodeURIComponent(session.account)}/${BRIDGE_REPOSITORY}/contents/${BRIDGE_WORKSPACE_PATH}`;
+  const endpoint = `https://api.github.com/repos/${encodeURIComponent(session.account)}/${encodeURIComponent(session.server || BRIDGE_REPOSITORY)}/contents/${BRIDGE_WORKSPACE_PATH}`;
   const requestMetadata = () => request(endpoint, { cache: "no-store", headers: { ...bridgeHeaders(session.accessKey), "Cache-Control": "no-cache" } });
   let response = await requestMetadata();
   if (response.status === 404) return { workspace: null, sha: null };
@@ -137,7 +145,7 @@ async function readBridgeWorkspace(session, request) {
 }
 
 async function writeBridgeWorkspace(session, workspace, request, knownSha) {
-  const endpoint = `https://api.github.com/repos/${encodeURIComponent(session.account)}/${BRIDGE_REPOSITORY}/contents/${BRIDGE_WORKSPACE_PATH}`;
+  const endpoint = `https://api.github.com/repos/${encodeURIComponent(session.account)}/${encodeURIComponent(session.server || BRIDGE_REPOSITORY)}/contents/${BRIDGE_WORKSPACE_PATH}`;
   const safe = workspacePayload(workspace);
   const body = { message: "Sync MAGICUS workspace", content: Buffer.from(JSON.stringify(safe, null, 2), "utf8").toString("base64") };
   if (knownSha) body.sha = knownSha;
@@ -215,23 +223,25 @@ async function startDesktopShell() {
   };
 
   ipcMain.handle("magicus:validate-access", async (_event, payload) => {
+    const server = normalizeServer(payload?.server);
     const accessKey = typeof payload?.accessKey === "string" ? payload.accessKey.trim() : "";
+    if (!server) return { ok: false, code: "missing", message: "Enter your server to continue." };
     if (!accessKey) return { ok: false, code: "missing", message: "Enter your access key to continue." };
-    const result = await validateAccessKey(accessKey, net.fetch);
-    bridgeSession = result.ok ? { accessKey, account: result.account } : null;
+    const result = await validateAccessKey(accessKey, net.fetch, server);
+    bridgeSession = result.ok ? { accessKey, account: result.account, server } : null;
     return result;
   });
   ipcMain.handle("magicus:access-load", async () => {
     const saved = await readJson(credentialFile, null);
-    if (!saved?.username || !saved?.encryptedKey || !safeStorage.isEncryptionAvailable()) return null;
-    try { return { username: saved.username, accessKey: safeStorage.decryptString(Buffer.from(saved.encryptedKey, "base64")) }; } catch { return null; }
+    if (!saved?.server || !saved?.encryptedKey || !safeStorage.isEncryptionAvailable()) return null;
+    try { return { server: saved.server, accessKey: safeStorage.decryptString(Buffer.from(saved.encryptedKey, "base64")) }; } catch { return null; }
   });
   ipcMain.handle("magicus:access-save", async (_event, credentials) => {
-    const savedUsername = typeof credentials?.username === "string" ? credentials.username.trim().slice(0, 60) : "";
+    const savedServer = normalizeServer(credentials?.server);
     const savedKey = typeof credentials?.accessKey === "string" ? credentials.accessKey : "";
-    if (!savedUsername || !savedKey || !safeStorage.isEncryptionAvailable()) return { ok: false, message: "Secure credential storage is unavailable on this device." };
+    if (!savedServer || !savedKey || !safeStorage.isEncryptionAvailable()) return { ok: false, message: "Secure credential storage is unavailable on this device." };
     const encryptedKey = safeStorage.encryptString(savedKey).toString("base64");
-    await writeJson(credentialFile, { username: savedUsername, encryptedKey });
+    await writeJson(credentialFile, { server: savedServer, encryptedKey });
     return { ok: true };
   });
   ipcMain.handle("magicus:access-clear", async () => { await fs.rm(credentialFile, { force: true }); return { ok: true }; });
